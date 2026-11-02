@@ -1,0 +1,51 @@
+# Antes (AC1): pacotes por camada técnica
+
+## Dependências entre pacotes (gerado com jdeps -verbose:class)
+
+(raiz)                                        -> [ext] Spring Boot
+.Controller                                   -> .DTO, .Entity, .Service, [ext] Spring Web
+.Entity                                       -> [ext] Jakarta Persistence (JPA)
+.Repository                                   -> .Entity, [ext] Spring Data JPA
+.Service                                      -> .Entity, .Repository, [ext] Spring Core
+
+## Dependências por classe (somente classes do projeto e frameworks)
+
+Ac1finalApplication
+    -> org.springframework.boot.SpringApplication
+    -> org.springframework.boot.autoconfigure.SpringBootApplication
+Controller.AlunoController
+    -> DTO.AlunoDTO
+    -> Entity.AlunoEntity
+    -> Service.AlunoService
+    -> org.springframework.http.ResponseEntity
+    -> org.springframework.web.bind.annotation.CrossOrigin
+    -> org.springframework.web.bind.annotation.DeleteMapping
+    -> org.springframework.web.bind.annotation.GetMapping
+    -> org.springframework.web.bind.annotation.PathVariable
+    -> org.springframework.web.bind.annotation.PostMapping
+    -> org.springframework.web.bind.annotation.PutMapping
+    -> org.springframework.web.bind.annotation.RequestBody
+    -> org.springframework.web.bind.annotation.RequestMapping
+    -> org.springframework.web.bind.annotation.RestController
+DTO.AlunoDTO
+Domain.Aluno
+Entity.AlunoEntity
+    -> jakarta.persistence.Entity
+    -> jakarta.persistence.GeneratedValue
+    -> jakarta.persistence.Id
+    -> jakarta.persistence.Table
+Repository.AlunoRepository
+    -> Entity.AlunoEntity
+    -> org.springframework.data.jpa.repository.JpaRepository
+Service.AlunoService
+    -> Entity.AlunoEntity
+    -> Repository.AlunoRepository
+    -> org.springframework.stereotype.Service
+
+## Métricas
+
+Classes de produção analisadas: 7
+Pacotes do projeto: 7
+Arestas entre pacotes do projeto: 6
+Classes que dependem de JPA/entidade/repositório Spring Data (4): Controller.AlunoController, Entity.AlunoEntity, Repository.AlunoRepository, Service.AlunoService
+Classes que usam o domínio Aluno (0): -

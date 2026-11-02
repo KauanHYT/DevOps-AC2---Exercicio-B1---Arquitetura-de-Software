@@ -1,0 +1,80 @@
+# Depois do D2: Ports & Adapters no módulo aluno
+
+## Dependências entre pacotes (gerado com jdeps -verbose:class)
+
+(raiz)                                        -> [ext] Spring Boot
+.aluno.adapter.persistence                    -> .aluno.application.port, .aluno.domain, [ext] Jakarta Persistence (JPA), [ext] Spring Core, [ext] Spring Data JPA
+.aluno.adapter.web                            -> .aluno.application, .aluno.domain, [ext] Spring Web
+.aluno.application                            -> .aluno.api, .aluno.application.port, .aluno.domain, [ext] Spring Core, [ext] Spring Tx
+.aluno.application.port                       -> .aluno.domain
+.ranking                                      -> .aluno.api, [ext] Spring Core, [ext] Spring Web
+
+## Dependências por classe (somente classes do projeto e frameworks)
+
+Ac1finalApplication
+    -> org.springframework.boot.SpringApplication
+    -> org.springframework.boot.autoconfigure.SpringBootApplication
+aluno.adapter.persistence.AlunoEntity
+    -> jakarta.persistence.Entity
+    -> jakarta.persistence.GeneratedValue
+    -> jakarta.persistence.Id
+    -> jakarta.persistence.Table
+aluno.adapter.persistence.AlunoJpaRepository
+    -> org.springframework.data.domain.Pageable
+    -> org.springframework.data.jpa.repository.JpaRepository
+aluno.adapter.persistence.AlunoPersistenceAdapter
+    -> aluno.application.port.AlunoRepositoryPort
+    -> aluno.domain.Aluno
+    -> org.springframework.data.domain.PageRequest
+    -> org.springframework.data.domain.Pageable
+    -> org.springframework.stereotype.Component
+aluno.adapter.web.AlunoController
+    -> aluno.application.AlunoService
+    -> aluno.application.DadosCadastroAluno
+    -> aluno.domain.Aluno
+    -> org.springframework.http.ResponseEntity
+    -> org.springframework.web.bind.annotation.CrossOrigin
+    -> org.springframework.web.bind.annotation.DeleteMapping
+    -> org.springframework.web.bind.annotation.GetMapping
+    -> org.springframework.web.bind.annotation.PathVariable
+    -> org.springframework.web.bind.annotation.PostMapping
+    -> org.springframework.web.bind.annotation.PutMapping
+    -> org.springframework.web.bind.annotation.RequestBody
+    -> org.springframework.web.bind.annotation.RequestMapping
+    -> org.springframework.web.bind.annotation.RequestParam
+    -> org.springframework.web.bind.annotation.RestController
+aluno.adapter.web.AlunoDTO
+    -> aluno.domain.Aluno
+aluno.api.ProgressoAluno
+aluno.api.ProgressoAlunoConsulta
+aluno.application.AlunoService
+    -> aluno.api.ProgressoAluno
+    -> aluno.api.ProgressoAlunoConsulta
+    -> aluno.application.port.AlunoRepositoryPort
+    -> aluno.domain.Aluno
+    -> org.springframework.stereotype.Service
+    -> org.springframework.transaction.annotation.Transactional
+aluno.application.DadosCadastroAluno
+aluno.application.port.AlunoRepositoryPort
+    -> aluno.domain.Aluno
+aluno.domain.Aluno
+ranking.PosicaoRanking
+ranking.RankingController
+    -> org.springframework.http.ResponseEntity
+    -> org.springframework.web.bind.annotation.CrossOrigin
+    -> org.springframework.web.bind.annotation.GetMapping
+    -> org.springframework.web.bind.annotation.RequestMapping
+    -> org.springframework.web.bind.annotation.RequestParam
+    -> org.springframework.web.bind.annotation.RestController
+ranking.RankingService
+    -> aluno.api.ProgressoAluno
+    -> aluno.api.ProgressoAlunoConsulta
+    -> org.springframework.stereotype.Service
+
+## Métricas
+
+Classes de produção analisadas: 15
+Pacotes do projeto: 8
+Arestas entre pacotes do projeto: 9
+Classes que dependem de JPA/entidade/repositório Spring Data (3): aluno.adapter.persistence.AlunoEntity, aluno.adapter.persistence.AlunoJpaRepository, aluno.adapter.persistence.AlunoPersistenceAdapter
+Classes que usam o domínio Aluno (5): aluno.adapter.persistence.AlunoPersistenceAdapter, aluno.adapter.web.AlunoController, aluno.adapter.web.AlunoDTO, aluno.application.AlunoService, aluno.application.port.AlunoRepositoryPort
