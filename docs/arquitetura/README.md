@@ -9,7 +9,7 @@ Regra de ouro usada na revisão: o C4 é explicado pelo ADR; o ADR é sustentado
 | Desafio | Tema | ADR | C4 | Evidência | Status |
 |---|---|---|---|---|---|
 | 1 | Drivers e evolução do Core | [ADR-001](#18-adr-001--monólito-modular-para-o-core) | [Container](#19-c4--container) | [desafio-1](evidencias/desafio-1) | Concluído |
-| 2 | Organização interna do Core | [ADR-002](#28-adr-002--ports--adapters-no-módulo-aluno) | [Component](#29-c4--component-do-core) | [desafio-2](evidencias/desafio-2) | Concluído (falta anexar `mvn-test.txt`) |
+| 2 | Organização interna do Core | [ADR-002](#28-adr-002--ports--adapters-no-módulo-aluno) | [Component](#29-c4--component-do-core) | [desafio-2](evidencias/desafio-2) | Concluído |
 | 3 | Serviço Python e IA | — | — | — | Pendente |
 | 4 | Comunicação e eventos | — | — | — | Pendente |
 | 5 | IoT e MQTT | — | — | — | Pendente |
@@ -115,7 +115,7 @@ Só entram aqui RNFs capazes de alterar estrutura, comunicação, dados, implant
 **Hipótese:** reorganizar por capacidade, com API pública explícita, reduz o acoplamento entre funcionalidades sem custo operacional, e a fronteira pode ser verificada automaticamente.
 
 **Procedimento**
-1. Grafo de dependências das classes compiladas **antes** da mudança (commit `4ae2fd0`), gerado com `jdeps`.
+1. Grafo de dependências das classes compiladas **antes** da mudança, gerado com `jdeps` a partir da versão em camadas da AC1 ([commit `4ae2fd0` do repositório da AC1](https://github.com/KauanHYT/devops-ac1---entrega-final-atdd-em-spring-boot-e-docker/tree/4ae2fd0)).
 2. Reorganização: `aluno/` (com `api/`) e o novo `ranking/`, que consome só `aluno.api.ProgressoAlunoConsulta`.
 3. Grafo **depois** e regras ArchUnit em [`ArquiteturaModularTest`](../../src/test/java/com/grupo7/ac1final/arquitetura/ArquiteturaModularTest.java).
 
@@ -276,9 +276,13 @@ Ficamos com 2 ASRs de propósito: os outros RNFs já estão cobertos por ASRs ex
 | `AlunoApiIntegrationTest` | HTTP → caso de uso → domínio → JPA, e `/ranking` | Sim |
 | `ArquiteturaHexagonalTest`, `ArquiteturaModularTest` | Direção das dependências e fronteiras de módulo | Não (análise de bytecode) |
 
-**Como reproduzir e registrar**
+**Resultado da suíte completa (2026-11-02):** `Tests run: 39, Failures: 0, Errors: 0, Skipped: 0`, BUILD SUCCESS. São 31 testes de comportamento e 7 regras de arquitetura, mais o `contextLoads`.
+
+![Execução do mvn test: 39 testes, 0 falhas](evidencias/desafio-2/mvn-test.png)
+
+**Como reproduzir**
 ```bash
-./mvnw test | tee docs/arquitetura/evidencias/desafio-2/mvn-test.txt
+./mvnw test
 ```
 
 **Dívida registrada:** o cadastro (`POST /alunos`) ainda aceita estado inicial vindo do cliente (comportamento da AC1, preservado pela RPC). Isso permite criar um aluno PREMIUM com 0 cursos, e vira candidato a regra de domínio quando entrarem moedas e badges.
@@ -367,7 +371,8 @@ O registro da AC2 antecipou algumas decisões sem o padrão completo. Elas ficam
 
 - **AC2:** "Decisões Arquiteturais — Desafio 1" (substituído por este registro). Correção conceitual: aquele texto chamava de "monólito modular" a divisão `Domain/Service/Controller`, que é um monólito **em camadas**. A modularização por capacidade foi feita de fato no Desafio 1 do B1.
 - **B1-D1** (2026-11-01): ADR-001, módulos `aluno` e `ranking`.
-- **B1-D2** (2026-11-01): ADR-002, Ports & Adapters no módulo `aluno`.
+- **B1-D2** (2026-11-01): ADR-002, Ports & Adapters no módulo `aluno`. Suíte completa validada em 2026-11-02 (39 testes, 0 falhas).
+- **Repositórios:** a versão em camadas (AC1) permanece no repositório original. A versão modular (B1) está neste repositório, conforme orientação da professora.
 
 # Síntese para a PoC da AF
 
