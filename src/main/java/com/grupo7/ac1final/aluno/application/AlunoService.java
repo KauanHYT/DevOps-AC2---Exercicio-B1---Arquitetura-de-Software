@@ -6,6 +6,7 @@ import com.grupo7.ac1final.aluno.application.port.AlunoRepositoryPort;
 import com.grupo7.ac1final.aluno.domain.Aluno;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.grupo7.ac1final.aluno.api.ProgressoIndividualConsulta;
 
 import java.util.List;
 import java.util.Optional;
@@ -15,7 +16,7 @@ import java.util.Optional;
  * domínio e salva pela porta. Não conhece JPA, entidades nem HTTP (ADR-002).
  */
 @Service
-public class AlunoService implements ProgressoAlunoConsulta {
+public class AlunoService implements ProgressoAlunoConsulta, ProgressoIndividualConsulta {
 
     private final AlunoRepositoryPort repositorio;
 
@@ -74,6 +75,12 @@ public class AlunoService implements ProgressoAlunoConsulta {
             aluno.identificarMudancaDePlano();
             return repositorio.salvar(aluno);
         });
+    }
+
+    @Override
+    public Optional<ProgressoAluno> buscarProgresso(Long alunoId) {
+        return repositorio.buscarPorId(alunoId)
+                .map(aluno -> new ProgressoAluno(aluno.getId(), aluno.getPlano(), aluno.getCursosConcluidos()));
     }
 
     @Override

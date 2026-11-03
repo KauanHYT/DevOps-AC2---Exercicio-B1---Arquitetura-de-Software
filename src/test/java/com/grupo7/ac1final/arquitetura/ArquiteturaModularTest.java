@@ -34,6 +34,15 @@ class ArquiteturaModularTest {
     }
 
     @Test
+    void iaSoConheceAApiPublicaDoAluno() {
+        ArchRule regra = noClasses().that().resideInAPackage(BASE + ".ia..")
+                .should().dependOnClassesThat(
+                        resideInAPackage(BASE + ".aluno..").and(resideOutsideOfPackage(BASE + ".aluno.api..")))
+                .because("o módulo ia recebe o progresso do aluno só por aluno.api (ADR-001, ADR-003)");
+        regra.check(CLASSES);
+    }
+
+    @Test
     void alunoNaoDependeDoRanking() {
         ArchRule regra = noClasses().that().resideInAPackage(BASE + ".aluno..")
                 .should().dependOnClassesThat().resideInAPackage(BASE + ".ranking..")
