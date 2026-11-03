@@ -28,6 +28,15 @@ services:
     depends_on:
       - postgres
 
+  ia-service:
+    build:
+      context: ./ia-service
+    container_name: ac1-ia
+    environment:
+      ATRASO_MS: ${IA_ATRASO_MS:-0}
+    ports:
+      - "8000:8000"
+
   backend:
     build:
       context: .
