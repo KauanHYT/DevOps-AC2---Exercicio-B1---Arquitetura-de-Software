@@ -1,0 +1,28 @@
+# Mini-lab Desafio 3 - Core (Spring Boot) consumindo ia-service (FastAPI)
+# Executado em 2026-11-03 17:40:21 | timeouts do Core: recomendação 800 ms, assistente 5000 ms
+
+Aluno de teste: id=4, plano BASICO, 5 cursos concluídos
+
+## Cenário 1 - IA no ar
+   GET  /alunos/4/recomendacoes   -> HTTP 200 em   155 ms | origem=IA modelo=regras-v1 1o item=DADOS-220
+   POST /alunos/4/assistente      -> HTTP 200 em    64 ms | fontes=regra-voucher,regra-premium
+   [OK]     recomendação vem do modelo (origem IA)
+   [OK]     assistente responde 200
+
+## Cenário 2 - IA desligada (docker compose stop ia-service)
+   GET  /alunos/4/recomendacoes   -> HTTP 200 em   358 ms | origem=PADRAO modelo=padrao-core-v1 1o item=FUND-101
+   POST /alunos/4/assistente      -> HTTP 503 em   357 ms | 
+   PUT  /alunos/4/concluir-curso  -> HTTP 200 em    55 ms | cursosConcluidos=6
+   [OK]     recomendação degrada para a trilha padrão (HTTP 200, origem PADRAO)
+   [OK]     assistente responde 503 (indisponível, sem resposta inventada)
+   [OK]     conclusão de curso continua funcionando (HTTP 200)
+   [OK]     falha da IA detectada rápido (< 2000 ms)
+
+## Cenário 3 - IA lenta (ATRASO_MS=3000, acima do timeout de 800 ms da recomendação)
+   GET  /alunos/4/recomendacoes   -> HTTP 200 em   849 ms | origem=PADRAO modelo=padrao-core-v1 1o item=FUND-101
+   POST /alunos/4/assistente      -> HTTP 200 em  3046 ms | fontes=regra-voucher,regra-premium
+   [OK]     recomendação degrada (origem PADRAO) em vez de esperar os 3 s
+   [OK]     tempo da recomendação limitado pelo timeout (< 2000 ms)
+   [OK]     assistente, com timeout próprio de 5 s, ainda responde 200
+
+## Resultado: 9 de 9 verificações passaram

@@ -10,7 +10,7 @@ Regra de ouro usada na revisão: o C4 é explicado pelo ADR; o ADR é sustentado
 |---|---|---|---|---|---|
 | 1 | Drivers e evolução do Core | [ADR-001](#18-adr-001--monólito-modular-para-o-core) | [Container](#19-c4--container) | [desafio-1](evidencias/desafio-1) | Concluído |
 | 2 | Organização interna do Core | [ADR-002](#28-adr-002--ports--adapters-no-módulo-aluno) | [Component](#29-c4--component-do-core) | [desafio-2](evidencias/desafio-2) | Concluído |
-| 3 | Serviço Python e IA | — | — | — | Pendente |
+| 3 | Serviço Python e IA | [ADR-003](#38-adr-003--serviço-python-independente-para-a-ia) | [Container](#39-c4--container-fronteira-da-ia-e-protocolos) | [desafio-3](evidencias/desafio-3) | Concluído |
 | 4 | Comunicação e eventos | — | — | — | Pendente |
 | 5 | IoT e MQTT | — | — | — | Pendente |
 | 6 | CI/CD e observabilidade | — | — | — | Pendente |
@@ -43,6 +43,8 @@ Regra de ouro usada na revisão: o C4 é explicado pelo ADR; o ADR é sustentado
 | RPC-03 | Banco relacional (PostgreSQL) e dados da AC1 | Legado / dados |
 | RPC-04 | O contrato HTTP/JSON usado pelo frontend Vue não pode quebrar sem ajuste coordenado | Integração |
 | RPC-05 | Ambiente de execução em Docker Compose | Infraestrutura |
+| RPC-06 | ML e RAG/LLM são implementados em Python (a partir do D3) | Tecnologia |
+| RPC-07 | A indisponibilidade da IA não pode bloquear o fluxo essencial (a partir do D3) | Premissa de negócio |
 
 ---
 
@@ -57,7 +59,10 @@ Só entram aqui RNFs capazes de alterar estrutura, comunicação, dados, implant
 | ASR-03 | A arquitetura deve continuar operável por 6 devs: um artefato implantável enquanto não houver necessidade medida de deploy ou escala independente | Complexidade operacional / **S** (+ restrição de equipe) | D1 | Implantação, operação | ADR-001 | Compose segue com 1 container de backend | Atendido |
 | ASR-04 | Alterar uma regra de gamificação (ex.: 12 cursos, média 7,0) deve exigir mudança em um único lugar, o domínio, sem tocar controller nem banco | Modificabilidade / **S** | D2 | Estrutura interna, dependências | ADR-002 | Regra dos 12 cursos: 2 lugares → 1; `ArquiteturaHexagonalTest` | Atendido |
 | ASR-05 | Regras e casos de uso devem ser testáveis sem Spring e sem banco; o adapter de persistência deve ser trocável sem mudar os testes do domínio | Testabilidade / **S** | D2 | Estrutura (portas) | ADR-002 | Contrato da porta rodando em 2 adapters; 23 testes de comportamento sem infraestrutura | Atendido |
-| ASR-06… | Deploy independente da IA, tolerância a falhas, idempotência de eventos, observabilidade… | — | D3–D6 | — | — | — | A definir |
+| ASR-06 | Um modelo novo (recomendação ou assistente) vai para produção sem rebuild nem redeploy do Core | Deploy independente / **S** (+ implantação) | D3 | Implantação | ADR-003 | Container `ia-service` próprio + `modeloVersao` em cada resposta | Atendido |
+| ASR-07 | Com a IA fora do ar ou lenta, o fluxo essencial responde normalmente; a recomendação degrada em até 2 s e o assistente informa indisponibilidade | Tolerância a falhas / **R** | D3 | Comunicação | ADR-003 | `IaApiIntegrationTest`, `IaHttpClientTest`, `lab-ia.ps1` | Atendido |
+| ASR-08 | Picos de uso da IA são absorvidos escalando só o `ia-service` (sem estado, sem banco do Core) | Escalabilidade / **P** | D3 | Implantação | ADR-003 | Serviço stateless; o Core envia o contexto | Parcial: escala a medir no D6 |
+| ASR-09… | Eventos, idempotência, observabilidade… | — | D4–D6 | — | — | — | A definir |
 
 ---
 
@@ -356,13 +361,152 @@ flowchart LR
 
 ---
 
+# Desafio 3 — Serviço Python e IA
+
+**Pergunta:** onde fica a fronteira de ML (recomendação) e de RAG/LLM (assistente)? Os modelos são feitos em Python, têm ciclo de atualização próprio e carga variável, e podem ficar indisponíveis sem que isso impeça as operações essenciais do Core.
+
+## 3.1 RF
+
+- **RF03 Recomendação inteligente:** `GET /alunos/{id}/recomendacoes` no Core, que chama `POST /recomendacoes` no `ia-service`.
+- **RF04 Assistente educacional:** `POST /alunos/{id}/assistente` no Core, que chama `POST /assistente/perguntas` no `ia-service`.
+
+> **Premissa:** os modelos são **simulados** (recomendação por regras e RAG extrativo). Este desafio avalia a fronteira e o comportamento sob falha, não a qualidade do modelo. Trocar por um modelo treinado ou por um LLM real muda só o código Python; o contrato HTTP continua o mesmo.
+
+## 3.2 RNF analisados (FURPS+)
+
+| RNF | FURPS+ | Leitura no cenário | Vira ASR? |
+|---|---|---|---|
+| Deploy independente | S (+ implantação) | Os modelos são re-treinados e versionados num ciclo próprio | **Sim → ASR-06** |
+| Tolerância a falhas | R | A IA pode cair ou ficar lenta; o Core não pode cair junto | **Sim → ASR-07** |
+| Escalabilidade | P | Carga variável e cara (picos de perguntas ao assistente) | **Sim → ASR-08** |
+| Interoperabilidade | + (interface) | Java ↔ Python | Não: é resolvida pelo contrato HTTP/JSON e decorre da RPC-06, sem mudar a decisão |
+| Desempenho | P | A recomendação aparece na tela; o assistente pode demorar mais | Incorporado ao ASR-07 (orçamento de tempo por capacidade) |
+| Manutenibilidade | S | Já coberta por ASR-01 e ASR-04 | Não |
+
+## 3.3 ASRs selecionados (máx. 3)
+
+1. **ASR-06 Deploy independente.** Altera a **implantação**: um modelo novo vai para produção sem rebuild nem redeploy do Core, porque tem container próprio e informa `modeloVersao` em cada resposta.
+2. **ASR-07 Tolerância a falhas.** Altera a **comunicação**: o Core chama a IA com timeout curto e trata a falha (fallback ou indisponibilidade explícita). Também não declara dependência de inicialização em relação a ela.
+3. **ASR-08 Escalabilidade independente.** Altera a **implantação**: a IA ganha réplicas, GPU ou cota de API sem escalar o Core. Para isso o serviço não guarda estado nem acessa o banco do Core.
+
+## 3.4 RPCs aplicáveis
+
+- RPC-01: o Core permanece em Java/Spring Boot.
+- **RPC-06:** ML e RAG são implementados em Python.
+- **RPC-07:** a indisponibilidade da IA não pode bloquear o fluxo essencial.
+
+## 3.5 Decisão do Tech Lead
+
+- **Python, por si só, justifica um serviço?** **Não.** A linguagem é uma restrição (RPC-06), não um driver: daria para rodar Python dentro da JVM (GraalPy) ou como processo filho do Core. O que justifica um serviço é a soma dos ASR-06, 07 e 08: ciclo de vida próprio, falha isolada e escala própria.
+- **ML e RAG precisam da mesma fronteira?** **Por enquanto, um serviço só, mas com fronteiras internas separadas:** routers e módulos Python diferentes, duas portas no Core (`RecomendacaoIaPort` e `AssistenteIaPort`) e **timeouts diferentes** (800 ms para a recomendação e 5 s para o assistente). Ficam juntos porque são a mesma equipe, a carga é baixa e assim há um container a menos. A separação física vem quando o assistente passar a usar um LLM real; nesse momento, só muda a URL de uma das portas.
+- **Quais ASRs justificam autonomia e escala?** O ASR-06 (ciclo próprio) e o ASR-08 (escala própria). O ASR-07 define como o Core se protege da fronteira.
+- **Qual comportamento degradado é aceitável?**
+  - **Recomendação:** o Core devolve a trilha padrão, com HTTP 200 e `origem: "PADRAO"`, para a tela saber que não é personalizada.
+  - **Assistente:** HTTP 503 com mensagem clara. Não há resposta de reserva, porque uma resposta inventada é pior que nenhuma.
+  - **Cadastro, conclusão de curso e ranking:** não dependem da IA.
+  - **Inicialização:** o backend sobe mesmo com a IA fora do ar, porque não há `depends_on` no Compose.
+
+## 3.6 Alternativas e trade-offs
+
+| | (A) IA embutida no Core | (B) Módulo acoplado | **(C) Serviço Python independente** |
+|---|---|---|---|
+| Como fica | ML em Java, ou Python rodando dentro da JVM (GraalPy) | O Core executa o Python como processo filho ou sidecar no mesmo container, com o mesmo deploy | `ia-service` próprio (FastAPI), contrato HTTP/JSON, container próprio |
+| Ganha | Sem rede, um deploy só | Usa o ecossistema Python sem criar um serviço | Deploy, escala e falha isolados; ecossistema Python completo |
+| Perde | Fere a RPC-06 ou traz Python para a JVM; modelo novo exige deploy do Core; falha ou consumo de memória do modelo derruba o Core | Mesmo ciclo de deploy; um processo travado consome os recursos do Core; os dois escalam juntos | Rede (latência, timeout), contrato a manter, +1 container e +1 pipeline |
+| ASR-06 / 07 / 08 | ✗ / ✗ / ✗ | ✗ / parcial / ✗ | ✓ / ✓ / ✓ |
+| Veredito | Rejeitada | Rejeitada | **Escolhida** |
+
+**Sub-decisão sobre ML e RAG:** (C1) um serviço com fronteiras internas, **escolhida agora**; (C2) dois serviços, **adiada**, com gatilho registrado no ADR-003.
+
+## 3.7 Evidência (mini-lab)
+
+**Hipótese:** com o serviço Python isolado atrás de uma porta com timeout, a queda ou a lentidão da IA degrada só a recomendação e o assistente. O fluxo essencial do Core continua respondendo, e responde rápido.
+
+**Testes automatizados (`./mvnw test` e `pytest`)**
+
+| Teste | O que prova |
+|---|---|
+| [`IaHttpClientTest`](../../src/test/java/com/grupo7/ac1final/ia/adapter/http/IaHttpClientTest.java) | O adapter real (`RestClient`), contra um ia-service falso feito com o `HttpServer` do JDK: traduz o contrato e ignora campos novos; com a IA lenta, estoura o timeout em menos de 1,5 s; com o serviço desligado, falha rápido; erro 500 vira "indisponível" |
+| [`IaApiIntegrationTest`](../../src/test/java/com/grupo7/ac1final/ia/adapter/web/IaApiIntegrationTest.java) | O Core completo (Spring + H2): com a IA no ar, a origem é `IA`; com a IA desligada no meio do teste, a origem passa a ser `PADRAO`, o assistente responde 503 e `concluir-curso` continua com 200 |
+| `RecomendacaoServiceTest`, `AssistenteServiceTest`, `RecomendacaoPadraoTest` | Regras de degradação, testadas com portas falsas |
+| [`ArquiteturaIaTest`](../../src/test/java/com/grupo7/ac1final/arquitetura/ArquiteturaIaTest.java) + nova regra em `ArquiteturaModularTest` | Só o adapter HTTP conhece o ia-service, e o módulo `ia` acessa o aluno apenas por `aluno.api` |
+| [`ia-service/tests`](../../ia-service/tests) (pytest, 14 testes) | Regras do modelo, recuperação do RAG e contrato HTTP |
+
+![mvn test do Desafio 3: 59 testes, 0 falhas](evidencias/desafio-3/mvn-test-d3.png)
+
+**Mini-lab com Docker:** o script [`labs/desafio-3/lab-ia.ps1`](../../labs/desafio-3/lab-ia.ps1) roda 3 cenários e confere 9 verificações. O resultado está em [`evidencias/desafio-3/lab-resultado.txt`](evidencias/desafio-3/lab-resultado.txt).
+
+| Cenário | Resultado esperado |
+|---|---|
+| 1. IA no ar | Recomendação com `origem=IA`; assistente responde 200 |
+| 2. `docker compose stop ia-service` | Recomendação com 200 e `origem=PADRAO` em menos de 2 s; assistente 503; `concluir-curso` 200 |
+| 3. IA lenta (`IA_ATRASO_MS=3000`) | Recomendação com `origem=PADRAO` em cerca de 0,8 s (timeout); assistente 200, porque o timeout dele é de 5 s |
+
+**Como reproduzir**
+```bash
+./mvnw test -Dtest="IaHttpClientTest,IaApiIntegrationTest,ArquiteturaIaTest"
+cd ia-service && pip install -r requirements-dev.txt && pytest
+powershell -ExecutionPolicy Bypass -File labs/desafio-3/lab-ia.ps1
+```
+
+## 3.8 ADR-003 — Serviço Python independente para a IA
+
+- **Status:** Aceito (2026-11-03).
+- **Contexto:** a plataforma ganha recomendação (RF03) e assistente (RF04). Os modelos são em Python, têm ciclo de atualização próprio e carga variável. A IA pode cair, mas o fluxo essencial do Core não pode cair junto.
+- **ASRs / RPCs:** ASR-06, ASR-07, ASR-08 · RPC-01, RPC-06, RPC-07.
+- **Alternativas:** (A) IA embutida no Core; (B) módulo acoplado; (C) serviço Python independente; e, dentro de (C), ML e RAG juntos ou separados. A comparação está em 3.6.
+- **Decisão:** adotar **(C1)**, um `ia-service` em FastAPI com ML e RAG em módulos separados. No Core:
+  - um módulo `ia` com duas portas de saída (`RecomendacaoIaPort` e `AssistenteIaPort`), implementadas por um adapter HTTP;
+  - timeouts de conexão de 300 ms e de leitura de 800 ms (recomendação) e 5 s (assistente);
+  - fallback da recomendação para a trilha padrão (`origem=PADRAO`) e 503 explícito para o assistente.
+
+  O `ia-service` não acessa o banco do Core: o Core envia o contexto (plano e cursos concluídos) em cada chamada. O backend não declara `depends_on` para a IA.
+- **Consequências:**
+  - (+) Modelos evoluem e escalam sem tocar no Core.
+  - (+) A IA fora do ar custa no máximo um timeout, e só nas telas de IA.
+  - (+) Trocar o simulado por um modelo real ou por um LLM não muda o Core.
+  - (−) Não há circuit breaker: com a IA lenta, cada requisição de recomendação paga até 800 ms.
+  - (−) O contrato fica em dois lados (Pydantic e records Java). Isso é mitigado por testes de contrato nos dois lados e por um leitor tolerante.
+  - (−) Mais um container e mais um pipeline (D6).
+- **Revisitar quando:**
+  - o assistente passar a usar um LLM real: separar em dois serviços (C2);
+  - as métricas do D6 mostrarem muitas chamadas pagando timeout: adicionar circuit breaker (Resilience4j);
+  - a recomendação precisar de histórico de eventos: consumir os eventos do D4 em vez de receber o contexto na chamada.
+
+## 3.9 C4 — Container (fronteira da IA e protocolos)
+
+```mermaid
+flowchart TB
+    usuario["Aluno / Administrador<br/>[Pessoa]"]
+
+    subgraph plataforma["Plataforma Educação Continuada Gamificada [Sistema]"]
+        spa["Frontend Web<br/>[Container: Vue.js + Nginx]"]
+        core["API Core<br/>[Container: Java 21 / Spring Boot 4.1]<br/>Monólito modular: aluno, ranking, ia"]
+        db[("Banco de dados<br/>[Container: PostgreSQL 17]")]
+        ia["ia-service<br/>[Container: Python 3.12 / FastAPI]<br/>Recomendação (ML) e assistente (RAG)<br/>sem estado, sem acesso ao banco"]
+    end
+
+    usuario -- "Usa<br/>[navegador]" --> spa
+    spa -- "API REST<br/>[HTTP/JSON :8080]" --> core
+    core -- "Lê e grava<br/>[JDBC/JPA :5432]" --> db
+    core -- "POST /recomendacoes (timeout 800 ms)<br/>POST /assistente/perguntas (timeout 5 s)<br/>[HTTP/JSON :8000]" --> ia
+
+    classDef pessoa fill:#08427b,stroke:#052e56,color:#fff
+    classDef container fill:#1168bd,stroke:#0b4884,color:#fff
+    classDef novo fill:#2e7d32,stroke:#1b5e20,color:#fff
+    class usuario pessoa
+    class spa,core,db container
+    class ia novo
+```
+
+---
+
 # Próximos desafios: hipóteses herdadas, ainda não decididas
 
 O registro da AC2 antecipou algumas decisões sem o padrão completo. Elas ficam aqui só como **hipóteses**. Cada uma será decidida no seu desafio, com ASRs, alternativas e evidência próprias.
 
 | Desafio | Hipótese de partida | Gancho já existente no código |
 |---|---|---|
-| D3 — IA | Serviço Python independente, consumido pelo Core com timeout e degradação | Novo adapter de saída ao lado de `AlunoPersistenceAdapter` |
 | D4 — Eventos | A notificação da US 3 sai do `PUT /notificar` manual e passa a reagir ao evento "aluno virou PREMIUM" | `AlunoService.concluirCurso` é o ponto de publicação |
 | D5 — IoT | MQTT + gateway chamando o Core | `PUT /concluir-curso` **não é idempotente** (cada chamada soma 1), o que vira ASR de deduplicação |
 | D6 — CI/CD | Jenkins rodando `./mvnw verify` (inclui ArchUnit) antes da imagem; Prometheus medindo `/ranking` e `/concluir-curso` | Valida o ASR-02 e protege ADR-001/002 no pipeline |
@@ -372,8 +516,9 @@ O registro da AC2 antecipou algumas decisões sem o padrão completo. Elas ficam
 - **AC2:** "Decisões Arquiteturais — Desafio 1" (substituído por este registro). Correção conceitual: aquele texto chamava de "monólito modular" a divisão `Domain/Service/Controller`, que é um monólito **em camadas**. A modularização por capacidade foi feita de fato no Desafio 1 do B1.
 - **B1-D1** (2026-11-01): ADR-001, módulos `aluno` e `ranking`.
 - **B1-D2** (2026-11-01): ADR-002, Ports & Adapters no módulo `aluno`. Suíte completa validada em 2026-11-02 (39 testes, 0 falhas).
+- **B1-D3** (2026-11-03): ADR-003, `ia-service` (FastAPI) e módulo `ia` no Core com timeout e fallback.
 - **Repositórios:** a versão em camadas (AC1) permanece no repositório original. A versão modular (B1) está neste repositório, conforme orientação da professora.
 
 # Síntese para a PoC da AF
 
-*A preencher ao final do B1.* Até aqui seguem para a PoC: ADR-001 (monólito modular com fronteiras testadas) e ADR-002 (domínio isolado por portas).
+*A preencher ao final do B1.* Até aqui seguem para a PoC: ADR-001 (monólito modular com fronteiras testadas), ADR-002 (domínio isolado por portas) e ADR-003 (IA como serviço independente, com degradação controlada).
