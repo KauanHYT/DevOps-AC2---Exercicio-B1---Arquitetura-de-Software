@@ -1,0 +1,19 @@
+# B1 / Desafio 6 - o que o Prometheus coleta, e de onde.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # Core (Spring Boot): métricas do Actuator + Micrometer
+  - job_name: core
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["backend:8080"]
+        labels:
+          componente: core
+
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+        labels:
+          componente: broker
