@@ -12,7 +12,7 @@ Regra de ouro usada na revisão: o C4 é explicado pelo ADR; o ADR é sustentado
 | 2 | Organização interna do Core | [ADR-002](#28-adr-002--ports--adapters-no-módulo-aluno) | [Component](#29-c4--component-do-core) | [desafio-2](evidencias/desafio-2) | Concluído |
 | 3 | Serviço Python e IA | [ADR-003](#38-adr-003--serviço-python-independente-para-a-ia) | [Container](#39-c4--container-fronteira-da-ia-e-protocolos) | [desafio-3](evidencias/desafio-3) | Concluído |
 | 4 | Comunicação e eventos | [ADR-004](#48-adr-004--notificação-assíncrona-com-rabbitmq-e-outbox-transacional) | [Container + sequência](#49-c4--container-e-sequência-do-fluxo-crítico) | [desafio-4](evidencias/desafio-4) | Concluído |
-| 5 | IoT e MQTT | — | — | — | Pendente |
+| 5 | IoT e MQTT | [ADR-005](#58-adr-005--eventos-iot-por-mqtt-com-gateway-tradutor-e-deduplicação-no-core) | [Container + sequência](#59-c4--container-borda-iot-e-sequência) | [desafio-5](evidencias/desafio-5) | Concluído |
 | 6 | CI/CD e observabilidade | [ADR-006](#68-adr-006--esteira-com-caminhos-por-componente-e-métricas-ligadas-aos-asrs) | [Deployment + final](#69-c4--deployment-e-c4-final) | [desafio-6](evidencias/desafio-6) | Concluído |
 
 ---
@@ -30,7 +30,7 @@ Regra de ouro usada na revisão: o C4 é explicado pelo ADR; o ADR é sustentado
 | RF03 | Recomendação inteligente | — | Desafio 3 |
 | RF04 | Assistente educacional (RAG/LLM) | — | Desafio 3 |
 | RF05 | Notificações | US 3 (hoje é um `PUT /notificar` manual) | Desafio 4 |
-| RF06 | Eventos IoT | — | Desafio 5 |
+| RF06 | Eventos IoT | Laboratórios (presença, início e conclusão de atividade) | módulo `iot` + `iot-gateway`, `POST /iot/eventos` (Desafio 5) |
 
 > **Premissa:** o produto ainda não tem moedas nem badges. Neste registro, "conquistas" corresponde às recompensas que já existem (plano PREMIUM, voucher e cursos extras). Moedas e badges entram como novas regras do domínio, sem alterar a estrutura decidida no ADR-002.
 
@@ -47,7 +47,9 @@ Regra de ouro usada na revisão: o C4 é explicado pelo ADR; o ADR é sustentado
 | RPC-07 | A indisponibilidade da IA não pode bloquear o fluxo essencial (a partir do D3) | Premissa de negócio |
 | RPC-08 | As operações essenciais do Core concluem mesmo com um consumidor externo indisponível (a partir do D4) | Premissa de negócio |
 | RPC-09 | Adotar um broker exige custo operacional (a partir do D4) | Operação |
-| RPC-10 a RPC-12 | Reservados para as restrições do D5 (IoT), em andamento | — |
+| RPC-10 | Os dispositivos dos laboratórios têm baixo poder computacional (a partir do D5) | Hardware / integração |
+| RPC-11 | A conectividade dos laboratórios é intermitente (a partir do D5) | Infraestrutura |
+| RPC-12 | O protocolo e o broker de IoT adicionam componentes para operar (a partir do D5) | Operação |
 | RPC-13 | O Jenkins é a base da esteira (a partir do D6) | Ferramenta / processo |
 | RPC-14 | Prometheus e Grafana são as ferramentas de observabilidade do laboratório (a partir do D6) | Ferramenta / operação |
 | RPC-15 | Artefatos e configurações são versionados no repositório (a partir do D6) | Processo |
@@ -71,7 +73,9 @@ Só entram aqui RNFs capazes de alterar estrutura, comunicação, dados, implant
 | ASR-09 | Com o consumidor de notificação ou o broker fora do ar, a conclusão de curso responde 200 e a recompensa é aplicada | Disponibilidade / tolerância a falhas / **R** | D4 | Comunicação | ADR-004 | `NotificacaoAssincronaIntegrationTest`, `lab-eventos.ps1` (cenários 1 e 2); 0 conclusões com erro no `lab-observabilidade.ps1` (D6) | Atendido |
 | ASR-10 | Nenhuma promoção fica sem notificação: o evento é entregue quando o consumidor ou o broker voltam (pelo menos uma vez) | Recuperabilidade / **R** | D4 | Dados, operação | ADR-004 | Outbox + fila durável; `lab-eventos.ps1`; outbox e fila voltando a 0 no Prometheus (D6) | Atendido |
 | ASR-11 | Conclusão, recompensa e registro do evento são atômicos; só a entrega da notificação é eventual | Consistência / **R** (integridade) | D4 | Dados | ADR-004 | Outbox na mesma transação; `NotificacaoSincronaIntegrationTest` mostra a alternativa | Atendido |
-| ASR-12 a ASR-14 | Reservados para o D5 (IoT): conectividade intermitente, eficiência de comunicação, deduplicação de eventos | — | D5 | — | ADR-005 | — | Em andamento |
+| ASR-12 | Com o dispositivo, o gateway ou o Core fora do ar, nenhum evento IoT se perde e nenhum conta duas vezes | Tolerância à conectividade intermitente / **R** | D5 | Comunicação, dados | ADR-005 | Deduplicação por `eventoId` (UNIQUE); `EventoIotApiIntegrationTest`; `lab-iot.ps1` (cenários 2 a 5) | Atendido |
+| ASR-13 | O dispositivo publica um evento em poucas dezenas de bytes numa conexão persistente, sem uma requisição HTTP por evento | Eficiência de comunicação / **P** | D5 | Comunicação | ADR-005 | MQTT QoS 1; 71 bytes por evento no `lab-iot.ps1` | Atendido |
+| ASR-14 | O Core não conhece dispositivos nem MQTT: um formato novo de aparelho muda só o tradutor do gateway | Interoperabilidade / **S** | D5 | Estrutura, comunicação | ADR-005 | `ArquiteturaIotTest`; `iot-gateway/tests/test_traducao.py` | Atendido |
 | ASR-15 | Cada decisão arquitetural tem uma métrica que mostra, em funcionamento, se ela se sustenta (fallback da IA, eventos parados, essencial respondendo) | Observabilidade / **S** (operação) | D6 | Operação, estrutura | ADR-006 | `MetricasArquiteturaIntegrationTest`, `lab-observabilidade.ps1` (13 de 13), dashboard no Grafana | Atendido |
 | ASR-16 | Um componente que mudou é testado e implantado sem reconstruir nem reimplantar os outros; a falha de um não bloqueia os demais | Deploy independente / **S** (implantação) | D6 | Implantação | ADR-006 | `Jenkinsfile`; builds #4 (só o `ia-service`) e #5 (Core barrado, `ia-service` implantado) | Atendido |
 | ASR-17 | Nada chega à homologação sem passar nos testes, nas regras ArchUnit e no smoke test | Confiabilidade da entrega / **R** (+ testabilidade) | D6 | Implantação, operação | ADR-006 | Build #5: violação do ADR-001 bloqueou imagem e homologação do Core | Atendido |
@@ -688,6 +692,183 @@ sequenceDiagram
 
 ---
 
+# Desafio 5 — IoT e MQTT
+
+**Pergunta:** como receber eventos de dispositivos com pouco recurso e conexão instável sem transformar o Core num acoplamento direto com cada dispositivo? Os laboratórios passam a produzir eventos de presença, de início e de conclusão de atividade.
+
+## 5.1 RF
+
+- **RF06 Eventos IoT:** receber os eventos dos laboratórios e encaminhá-los ao ecossistema da plataforma.
+  - A **conclusão de atividade** soma um curso pelas mesmas regras do `PUT /concluir-curso`: 12 cursos dão PREMIUM com voucher, e a promoção segue o fluxo de eventos do D4 até a notificação.
+  - **Presença** e **início de atividade** ficam registrados (`GET /iot/eventos?alunoId=`) para frequência e analytics, sem mudar o progresso.
+
+## 5.2 RNF analisados (FURPS+)
+
+| RNF | FURPS+ | Leitura no cenário | Vira ASR? |
+|---|---|---|---|
+| Tolerância à conectividade intermitente | R | O aparelho perde a rede e reenvia; o QoS 1 entrega "pelo menos uma vez", então chegam duplicatas | **Sim → ASR-12** |
+| Eficiência de comunicação | P | Dispositivos com pouca CPU, memória, bateria e banda | **Sim → ASR-13** |
+| Interoperabilidade | S | Cada fabricante tem o seu formato; o Core não pode conhecer todos | **Sim → ASR-14** |
+| Disponibilidade | R | O laboratório não pode depender do Core estar no ar | Não vira ASR próprio: é coberta pelo ASR-12 (o broker guarda e o gateway tenta de novo) |
+| Escalabilidade | P | Mais laboratórios e mais aparelhos | Não agora: um broker e um gateway atendem a carga do lab; o gateway não tem estado e pode ganhar réplicas |
+| Segurança de integração | S | Os dispositivos ficam na rede do laboratório | Não vira ASR no lab: entra nas consequências (usuário por dispositivo, ACL por tópico, TLS) |
+
+## 5.3 ASRs selecionados (máx. 3)
+
+1. **ASR-12 Tolerância à conectividade intermitente.** Com o dispositivo, o gateway ou o Core fora do ar, nenhum evento se perde e nenhum conta duas vezes. Altera a **comunicação** (QoS 1 e sessão persistente) e os **dados** (deduplicação por `eventoId` na mesma transação, com `UNIQUE` no banco).
+2. **ASR-13 Eficiência de comunicação.** O dispositivo publica um evento em poucas dezenas de bytes, numa conexão que fica aberta, sem uma requisição HTTP por evento. Altera a **comunicação** (protocolo MQTT e payload compacto).
+3. **ASR-14 Interoperabilidade.** O Core não conhece dispositivos nem MQTT: um formato novo de aparelho muda só o tradutor do gateway. Altera a **estrutura** (um gateway tradutor entre a borda e o Core).
+
+## 5.4 RPCs aplicáveis
+
+- **RPC-10:** os dispositivos têm baixo poder computacional.
+- **RPC-11:** a conectividade dos laboratórios é intermitente.
+- **RPC-12:** o protocolo e o broker adicionam componentes para operar.
+- RPC-02 (equipe de 6), RPC-05 (Docker Compose) e RPC-09 (custo de um broker, D4) continuam valendo.
+
+## 5.5 Decisão do Tech Lead
+
+- **REST é suficiente?** Entre o gateway e o Core, sim: o Core recebe `POST /iot/eventos` como qualquer outra chamada. Entre o dispositivo e a plataforma, não. Cada evento seria uma conexão HTTP com cabeçalhos maiores que o próprio dado; sem rede, o aparelho teria de implementar fila e retentativa sozinho; e, com o Core fora, ou o evento se perde ou o dispositivo fica preso esperando.
+- **O que o MQTT resolve especificamente?**
+  - conexão persistente e leve, com cabeçalho fixo de 2 bytes (no lab, cada evento ocupou **71 bytes** de payload);
+  - QoS 1: o broker confirma o recebimento, e o aparelho reenvia se não houver confirmação;
+  - sessão persistente: o broker guarda as mensagens do assinante que caiu (no lab, o `iot-gateway`) e entrega quando ele volta;
+  - tópicos por laboratório e dispositivo (`labs/{lab}/dispositivos/{disp}/eventos`): os aparelhos não conhecem quem consome.
+- **Depois do MQTT, existe motivo arquitetural para outro broker?** Não, hoje não. O evento IoT tem um único consumidor (o Core, pelo gateway), e o efeito que interessa ao resto da plataforma (conclusão → promoção) **já chega ao RabbitMQ** pelo outbox do D4, sem nada novo. Ligar o MQTT à mensageria interna (alternativa C) só se justifica quando outros consumidores precisarem dos eventos crus, como analytics de presença. Também não usamos o RabbitMQ como broker MQTT (plugin `rabbitmq_mqtt`): manter a borda dos dispositivos num broker próprio separa o tráfego e a superfície de ataque da mensageria interna, ao custo de um container leve a mais (RPC-12).
+- **Como impedir duplicidade ou perda relevante de eventos?**
+  - **Perda:** QoS 1 do dispositivo até o broker; sessão persistente (`clean_session=false`, `client_id` fixo) do broker até o gateway; o gateway só confirma a mensagem (PUBACK) **depois** que o Core respondeu; com o Core fora, o gateway espera e tenta de novo (1, 2, 4... até 10 s).
+  - **Duplicidade:** o `eventoId` é gerado **no dispositivo**, então uma retransmissão chega com o mesmo id. O Core grava o `eventoId` **na mesma transação** em que soma o curso, e a coluna é `UNIQUE`. A repetição responde 200 `DUPLICADO` e não muda nada.
+  - **Por que não QoS 2:** ele garante "exatamente uma vez" só entre um cliente e o broker, não até o banco do Core, e custa 4 pacotes por mensagem num aparelho fraco. QoS 1 com idempotência no Core protege o caminho inteiro por menos.
+
+## 5.6 Alternativas e trade-offs
+
+| | (A) REST direto do dispositivo | **(B) MQTT + gateway consumidor** | (C) MQTT + mensageria interna |
+|---|---|---|---|
+| Como fica | Cada aparelho chama `POST` no Core | Aparelhos publicam no Mosquitto; o `iot-gateway` assina, traduz e chama `POST /iot/eventos` | O gateway (ou uma ponte MQTT → AMQP) publica os eventos crus no RabbitMQ, e o Core consome |
+| Ganha | Simples, sem broker | Conexão leve, QoS 1 e sessão persistente; o Core não conhece MQTT; um formato novo é só um tradutor novo | Vários consumidores dos eventos crus (analytics, frequência) |
+| Perde | Core acoplado a cada aparelho e formato; HTTP pesado; o dispositivo precisa de fila e retentativa; Core fora = evento perdido ou aparelho bloqueado | +1 broker e +1 serviço para operar (RPC-12); entrega "pelo menos uma vez" exige deduplicação | Dois brokers e mais um salto sem ASR que peça; o efeito relevante já chega ao RabbitMQ pelo outbox do D4 |
+| ASR-12 / 13 / 14 | ✗ / ✗ / ✗ | ✓ / ✓ / ✓ | ✓ / ✓ / ✓ (mais caro) |
+| Veredito | Rejeitada | **Escolhida** | Adiada (gatilho no ADR-005) |
+
+## 5.7 Evidência (mini-lab)
+
+**Hipótese:** com MQTT (QoS 1 e sessão persistente), um gateway tradutor e deduplicação por `eventoId` no Core, os eventos do laboratório chegam ao Core mesmo com o dispositivo, o gateway ou o Core fora do ar, e uma retransmissão nunca conta duas vezes.
+
+**Testes automatizados**
+
+| Teste | O que prova |
+|---|---|
+| [`RegistroEventoIotServiceTest`](../../src/test/java/com/grupo7/ac1final/iot/application/RegistroEventoIotServiceTest.java), [`EventoIotTest`](../../src/test/java/com/grupo7/ac1final/iot/domain/EventoIotTest.java) | Sem Spring: a mesma conclusão 3 vezes soma 1 curso; presença e início não somam; aluno inexistente não é registrado; evento incompleto é recusado |
+| [`EventoIotApiIntegrationTest`](../../src/test/java/com/grupo7/ac1final/iot/adapter/web/EventoIotApiIntegrationTest.java) | Core completo (Spring + H2): 201 `REGISTRADO` e depois 200 `DUPLICADO`; 12 conclusões vindas do laboratório viram PREMIUM; aluno inexistente dá 404 e evento inválido dá 400 |
+| [`ArquiteturaIotTest`](../../src/test/java/com/grupo7/ac1final/arquitetura/ArquiteturaIotTest.java) + regra nova em `ArquiteturaModularTest` | Nenhuma classe do Core conhece MQTT; o domínio `iot` é Java puro; o `iot` só usa `aluno.api` |
+| [`iot-gateway/tests`](../../iot-gateway/tests) (pytest, 21 testes) | Tradução do formato compacto; com o Core fora, o gateway espera e tenta de novo; mensagem inválida é descartada; contrato HTTP com o Core; payload abaixo de 80 bytes |
+
+![mvn test do Desafio 5: 89 testes, 0 falhas](evidencias/desafio-5/mvn-test-d5.png)
+
+![pytest do iot-gateway: 21 testes](evidencias/desafio-5/pytest-iot-gateway.png)
+
+**Mini-lab com Docker:** o script [`labs/desafio-5/lab-iot.ps1`](../../labs/desafio-5/lab-iot.ps1) usa o simulador de dispositivo e confere 10 verificações. Resultado: **10 de 10**, em [`evidencias/desafio-5/lab-resultado.txt`](evidencias/desafio-5/lab-resultado.txt). O [log do gateway](evidencias/desafio-5/iot-gateway-log.txt) mostra cada evento como `REGISTRADO`, `DUPLICADO` ou "nova tentativa".
+
+| Cenário | Resultado obtido |
+|---|---|
+| 1. Fluxo normal | Presença, início e conclusão chegaram ao Core em 0,1 s; só a conclusão somou curso; **71 bytes** por evento |
+| 2. A mesma conclusão enviada 3 vezes | Somou **1** curso; as 2 repetições voltaram como `DUPLICADO` |
+| 3. Dispositivo offline com 10 conclusões guardadas | As 10 chegaram ao reconectar; o aluno foi a 12 cursos, PREMIUM e voucher; a notificação do D4 foi entregue (`notificado=true`) |
+| 4. `docker compose stop iot-gateway` + 3 conclusões | Com o gateway fora, nada chegou ao Core; ao religar, as 3 mensagens guardadas no broker chegaram em 1,1 s |
+| 5. `docker compose stop backend` + 1 conclusão | O gateway registrou "nova tentativa"; com o Core de volta, o evento foi entregue em 1,1 s |
+
+**Como reproduzir**
+```bash
+./mvnw test -Dtest="EventoIotTest,RegistroEventoIotServiceTest,EventoIotApiIntegrationTest,ArquiteturaIotTest"
+cd iot-gateway && pip install -r requirements-dev.txt && pytest
+powershell -ExecutionPolicy Bypass -File labs/desafio-5/lab-iot.ps1
+docker compose run --rm iot-simulador --aluno 1 --presenca --conclusoes 1    # simulador avulso
+```
+
+## 5.8 ADR-005 — Eventos IoT por MQTT, com gateway tradutor e deduplicação no Core
+
+- **Status:** Aceito (2026-11-04).
+- **Contexto:** os laboratórios passam a produzir eventos de presença, início e conclusão de atividade em dispositivos com pouco recurso e conexão instável. O Core não pode se acoplar a cada dispositivo, e um evento repetido não pode somar curso duas vezes.
+- **ASRs / RPCs:** ASR-12, ASR-13, ASR-14 · RPC-10, RPC-11, RPC-12.
+- **Alternativas:** (A) REST direto do dispositivo; (B) MQTT + gateway consumidor; (C) MQTT + integração com a mensageria interna. A comparação está em 5.6.
+- **Decisão:** adotar **(B)**.
+  - Os dispositivos publicam com QoS 1 no **Mosquitto**, no tópico `labs/{lab}/dispositivos/{disp}/eventos`, com payload compacto (`{"id","a","t","ts"}`) e o `eventoId` gerado no próprio aparelho.
+  - O **`iot-gateway`** (Python, paho-mqtt) assina `labs/+/dispositivos/+/eventos` com sessão persistente, traduz para o formato da plataforma e chama `POST /iot/eventos`. Ele só confirma a mensagem depois da resposta do Core e tenta de novo quando o Core está fora.
+  - No Core, o módulo **`iot`** registra o `eventoId` na mesma transação em que conclui o curso, pela API pública `ConclusaoDeCurso` do aluno, com `UNIQUE` em `eventos_iot.evento_id`.
+  - O backend não declara `depends_on` nem para o broker nem para o gateway.
+  - O `iot-gateway` ganhou caminho próprio na esteira do D6: testes → imagem → smoke da imagem.
+- **Consequências:**
+  - (+) O Core não conhece MQTT nem o formato dos aparelhos (regra ArchUnit); um fabricante novo muda só o tradutor.
+  - (+) Nenhum evento se perdeu com o dispositivo, o gateway ou o Core fora, e nenhum contou duas vezes (lab: 10 de 10).
+  - (+) A conclusão vinda do laboratório segue as mesmas regras e o mesmo fluxo de eventos do D4, sem código novo para promoção e notificação.
+  - (−) Mais dois componentes para operar (broker e gateway, RPC-12).
+  - (−) Com o Core fora, o gateway segura **uma** mensagem por vez enquanto tenta de novo: as outras esperam no broker. Se a espera passar do keepalive, o broker reentrega, e o Core descarta a repetição.
+  - (−) Só no laboratório: broker sem usuário nem TLS (`allow_anonymous true`), um único gateway e o simulador rodando na mesma imagem do gateway.
+  - (−) Os eventos crus (presença, início) ficam só na tabela do Core; ninguém mais os consome.
+  - (−) Na esteira, o gateway não tem homologação de verdade (precisaria de um broker), só o smoke da imagem.
+- **Revisitar quando:**
+  - outros consumidores precisarem dos eventos crus (analytics de presença): ligar o MQTT ao RabbitMQ (C) ou publicar a partir do Core;
+  - houver aparelhos em rede aberta: usuário por dispositivo, ACL por tópico e TLS (porta 8883);
+  - o volume de laboratórios crescer: réplicas do gateway com *shared subscriptions* (`$share/...`) e métricas de eventos duplicados no Prometheus (ADR-006).
+
+## 5.9 C4 — Container (borda IoT) e sequência
+
+```mermaid
+flowchart TB
+    dispositivo["Dispositivo do laboratório<br/>[Sistema externo: leitor de presença / estação]<br/>pouco recurso, conexão instável"]
+
+    subgraph plataforma["Plataforma Educação Continuada Gamificada [Sistema]"]
+        mosquitto["Mosquitto<br/>[Container: broker MQTT 2]<br/>labs/{lab}/dispositivos/{disp}/eventos<br/>sessões persistentes"]
+        gateway["iot-gateway<br/>[Container: Python / paho-mqtt]<br/>traduz o formato do aparelho<br/>só confirma depois do Core"]
+        core["API Core<br/>[Container: Java 21 / Spring Boot 4.1]<br/>módulo iot: deduplicação por eventoId<br/>via aluno.api (ConclusaoDeCurso)"]
+        db[("PostgreSQL 17<br/>alunos + eventos_iot (evento_id UNIQUE)<br/>+ outbox_eventos")]
+        mq["RabbitMQ<br/>[D4]"]
+    end
+
+    dispositivo -- "PUBLISH QoS 1<br/>{id, a, t, ts} ~71 bytes<br/>[MQTT :1883]" --> mosquitto
+    mosquitto -- "entrega (sessão persistente)<br/>[MQTT]" --> gateway
+    gateway -- "POST /iot/eventos<br/>[HTTP/JSON :8080]" --> core
+    core -- "evento + conclusão na mesma transação<br/>[JDBC]" --> db
+    core -- "promoção para PREMIUM (outbox, ADR-004)<br/>[AMQP]" --> mq
+
+    classDef externo fill:#999,stroke:#666,color:#fff
+    classDef container fill:#1168bd,stroke:#0b4884,color:#fff
+    classDef novo fill:#2e7d32,stroke:#1b5e20,color:#fff
+    class dispositivo externo
+    class core,db,mq container
+    class mosquitto,gateway novo
+```
+
+**Sequência:** dispositivo que ficou offline e retransmite.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Disp as Dispositivo
+    participant MQ as Mosquitto
+    participant GW as iot-gateway
+    participant Core as API Core
+    participant DB as PostgreSQL
+
+    Note over Disp: sem rede: guarda os eventos (cada um com o seu id)
+    Disp->>MQ: PUBLISH QoS 1 (id=e1, conclusão)
+    MQ-->>Disp: PUBACK
+    MQ->>GW: entrega e1
+    GW->>Core: POST /iot/eventos (e1)
+    Core->>DB: transação: concluir curso + registrar e1
+    Core-->>GW: 201 REGISTRADO
+    GW-->>MQ: PUBACK (só agora a mensagem sai do broker)
+    Note over Disp,MQ: o PUBACK do broker se perdeu: o dispositivo reenvia
+    Disp->>MQ: PUBLISH QoS 1 (id=e1 de novo)
+    MQ->>GW: entrega e1
+    GW->>Core: POST /iot/eventos (e1)
+    Core->>DB: e1 já registrado
+    Core-->>GW: 200 DUPLICADO (nada muda)
+    GW-->>MQ: PUBACK
+```
+
+---
+
 # Desafio 6 — CI/CD e observabilidade
 
 **Pergunta:** a arquitetura pode ser construída, implantada e observada com segurança? Depois dos D1 a D4, a solução tem um Core Java, dois serviços Python, um broker e um banco. Ela só se sustenta se a equipe conseguir testar, implantar e observar cada parte, e se cada decisão anterior puder ser verificada em funcionamento, não só no papel.
@@ -696,7 +877,7 @@ Um motivo concreto: no meio do B1, um commit enviado direto para a `main` deixou
 
 ## 6.1 RF
 
-- **Todos os RFs já construídos** (RF01 ranking, RF02 conquistas, RF03 e RF04 IA, RF05 notificações): cada um precisa ser testado e implantado sem quebrar os outros. O RF06 (IoT) entra na esteira quando o D5 for concluído.
+- **Todos os RFs já construídos** (RF01 ranking, RF02 conquistas, RF03 e RF04 IA, RF05 notificações): cada um precisa ser testado e implantado sem quebrar os outros. O RF06 (IoT, D5) também: o `iot-gateway` ganhou caminho próprio na esteira.
 - **Operação e evolução da solução:** saber, em funcionamento, se as decisões dos ADRs 001 a 004 estão se sustentando.
 
 ## 6.2 RNF analisados (FURPS+)
@@ -823,7 +1004,7 @@ docker compose up -d --build jenkins     # http://localhost:8081 (admin/admin) �
   - (+) Uma violação de ADR nunca chega à homologação, e os outros componentes continuam sendo entregues (build #5).
   - (+) Cada ADR tem uma métrica em funcionamento, e as falhas do lab apareceram no Prometheus (13 de 13).
   - (+) Tudo é versionado: Jenkinsfile, configuração do Jenkins, plugins, `prometheus.yml`, datasource e dashboard.
-  - (−) A detecção é por pastas: um arquivo comum fora do mapa (por exemplo, o `docker-compose.yaml`) não dispara nenhum caminho, e o mapa precisa ser atualizado quando surgir um componente novo (o `iot-gateway` do D5).
+  - (−) A detecção é por pastas: um arquivo comum fora do mapa (por exemplo, o `docker-compose.yaml`) não dispara nenhum caminho, e o mapa precisa ser atualizado quando surgir um componente novo, como foi feito com o `iot-gateway` no D5.
   - (−) Simplificações de laboratório: o Jenkins roda como root com acesso ao Docker da máquina (`docker.sock`), a senha `admin` fica no `casc.yaml`, e a imagem `jenkins/jenkins:lts-jdk21` e os plugins não têm versão fixa.
   - (−) Os serviços Python ainda não exportam métricas próprias (só `/health`), e não há alertas nem deploy de produção, só homologação.
   - (−) O p95 de 10 ms foi medido com a carga do lab (cerca de 50 requisições), não com 100 mil usuários. O ASR-02 continua parcial.
@@ -831,7 +1012,7 @@ docker compose up -d --build jenkins     # http://localhost:8081 (admin/admin) �
   - componentes passarem a ter times diferentes: separar os pipelines (B);
   - houver ambiente de produção: um estágio de deploy com aprovação manual (`input`) só na `main`;
   - o lab virar operação real: alertas no Prometheus para `gamificacao_outbox_pendentes > 0` por mais de 5 min e para `up == 0`, credenciais fora do repositório e agentes separados para o Jenkins;
-  - o D5 for concluído: incluir o `iot-gateway` no mapa de componentes e as métricas de eventos IoT duplicados.
+  - houver muitos laboratórios: métricas de eventos IoT duplicados e de reentregas no Prometheus. (O `iot-gateway` já entrou no mapa de componentes no D5, com testes → imagem → smoke da imagem.)
 
 ## 6.9 C4 — Deployment e C4 final
 
@@ -851,6 +1032,8 @@ flowchart TB
             mq["ac1-rabbitmq<br/>[RabbitMQ 4]<br/>:15692 métricas"]
             ia["ac1-ia<br/>[ia-service]"]
             notif["ac1-notificacao<br/>[notificacao-service]"]
+            mosq["ac1-mosquitto<br/>[Mosquitto 2]<br/>:1883"]
+            gw["ac1-iot-gateway<br/>[iot-gateway]"]
             prom["ac1-prometheus<br/>[Prometheus v3.5.0]<br/>coleta a cada 5 s"]
             graf["ac1-grafana<br/>[Grafana 12.1.0]<br/>dashboard versionado"]
         end
@@ -881,18 +1064,20 @@ flowchart TB
     core --> mq
     core --> ia
     mq --> notif
+    mosq --> gw
+    gw -- "POST /iot/eventos" --> core
 
     classDef pessoa fill:#08427b,stroke:#052e56,color:#fff
     classDef container fill:#1168bd,stroke:#0b4884,color:#fff
     classDef novo fill:#2e7d32,stroke:#1b5e20,color:#fff
     classDef infra fill:#666,stroke:#444,color:#fff
     class dev pessoa
-    class core,db,mq,ia,notif container
+    class core,db,mq,ia,notif,mosq,gw container
     class prom,graf,jenkins,hcore,hia,hnotif novo
     class repo,sock infra
 ```
 
-**C4 Container final do B1** (o que foi decidido nos ADRs 001 a 004 e 006; o D5 ainda está em andamento):
+**C4 Container final do B1** (o que foi decidido nos ADRs 001 a 006):
 
 ```mermaid
 flowchart TB
@@ -902,12 +1087,13 @@ flowchart TB
 
     subgraph plataforma["Plataforma Educação Continuada Gamificada [Sistema]"]
         spa["Frontend Web<br/>[Container: Vue.js + Nginx]"]
-        core["API Core<br/>[Container: Java 21 / Spring Boot 4.1]<br/>Monólito modular (ADR-001): aluno, ranking, ia<br/>Ports & Adapters no aluno (ADR-002)<br/>outbox + relay (ADR-004), métricas (ADR-006)"]
-        db[("Banco de dados<br/>[Container: PostgreSQL 17]<br/>alunos + outbox_eventos")]
+        core["API Core<br/>[Container: Java 21 / Spring Boot 4.1]<br/>Monólito modular (ADR-001): aluno, ranking, ia, iot<br/>Ports & Adapters no aluno e no iot (ADR-002)<br/>outbox + relay (ADR-004), métricas (ADR-006)"]
+        db[("Banco de dados<br/>[Container: PostgreSQL 17]<br/>alunos + outbox_eventos + eventos_iot")]
         ia["ia-service<br/>[Container: Python / FastAPI]<br/>recomendação e assistente (ADR-003)"]
         mq["RabbitMQ<br/>[Container: broker AMQP]<br/>gamificacao.eventos (ADR-004)"]
         notif["notificacao-service<br/>[Container: Python / FastAPI + pika]<br/>idempotente por eventoId (ADR-004)"]
-        iot["Integração IoT<br/>[D5: em andamento]"]
+        mosquitto["Mosquitto<br/>[Container: broker MQTT]<br/>borda dos laboratórios (ADR-005)"]
+        gateway["iot-gateway<br/>[Container: Python / paho-mqtt]<br/>traduz o formato do aparelho (ADR-005)"]
     end
 
     subgraph operacao["Operação [ADR-006]"]
@@ -923,12 +1109,14 @@ flowchart TB
     core -- "relay [AMQP :5672]" --> mq
     mq -- "[AMQP]" --> notif
     notif -- "PUT /notificar [HTTP/JSON]" --> core
-    dispositivos -. "eventos de presença e conclusão (D5)" .-> iot
-    iot -. "D5" .-> core
+    dispositivos -- "presença, início, conclusão<br/>[MQTT QoS 1 :1883]" --> mosquitto
+    mosquitto -- "[MQTT, sessão persistente]" --> gateway
+    gateway -- "POST /iot/eventos, deduplicado por eventoId<br/>[HTTP/JSON :8080]" --> core
     equipe -- "commit" --> jenkins
     jenkins -- "testa, constrói e implanta por componente" --> core
     jenkins -- "testa, constrói e implanta" --> ia
     jenkins -- "testa, constrói e implanta" --> notif
+    jenkins -- "testa e constrói" --> gateway
     prom -- "scrape /actuator/prometheus" --> core
     prom -- "scrape :15692" --> mq
     graf -- "PromQL" --> prom
@@ -937,22 +1125,18 @@ flowchart TB
     classDef pessoa fill:#08427b,stroke:#052e56,color:#fff
     classDef container fill:#1168bd,stroke:#0b4884,color:#fff
     classDef novo fill:#2e7d32,stroke:#1b5e20,color:#fff
-    classDef pendente fill:#999,stroke:#666,color:#fff,stroke-dasharray: 5 5
+    classDef externo fill:#999,stroke:#666,color:#fff
     class usuario,equipe pessoa
-    class spa,core,db,ia,mq,notif container
+    class spa,core,db,ia,mq,notif,mosquitto,gateway container
     class jenkins,prom,graf novo
-    class iot,dispositivos pendente
+    class dispositivos externo
 ```
 
 ---
 
-# Próximos desafios: hipóteses herdadas, ainda não decididas
+# Hipóteses herdadas da AC2
 
-O registro da AC2 antecipou algumas decisões sem o padrão completo. Elas ficam aqui só como **hipóteses**. Cada uma será decidida no seu desafio, com ASRs, alternativas e evidência próprias.
-
-| Desafio | Hipótese de partida | Gancho já existente no código |
-|---|---|---|
-| D5 — IoT | MQTT + gateway chamando o Core | `PUT /concluir-curso` **não é idempotente** (cada chamada soma 1), o que vira ASR de deduplicação; o RabbitMQ do D4 tem plugin MQTT (avaliar se um broker só atende) |
+Todas as hipóteses que o registro da AC2 tinha antecipado sem o padrão completo foram decididas nos desafios 1 a 6, cada uma com ASRs, alternativas e evidência próprias.
 
 # Histórico
 
@@ -961,6 +1145,7 @@ O registro da AC2 antecipou algumas decisões sem o padrão completo. Elas ficam
 - **B1-D2** (2026-11-01): ADR-002, Ports & Adapters no módulo `aluno`. Suíte completa validada em 2026-11-02 (39 testes, 0 falhas).
 - **B1-D3** (2026-11-03): ADR-003, `ia-service` (FastAPI) e módulo `ia` no Core com timeout e fallback.
 - **B1-D4** (2026-11-03): ADR-004, notificação assíncrona com outbox, RabbitMQ e `notificacao-service`. Suíte completa com 73 testes, 0 falhas; mini-lab com 13 de 13 verificações.
+- **B1-D5** (2026-11-04, concluído depois do D6): ADR-005, eventos IoT por MQTT (Mosquitto) com `iot-gateway` tradutor e deduplicação por `eventoId` no módulo `iot` do Core. Suíte com 89 testes, 0 falhas; pytest do gateway com 21; mini-lab com 10 de 10.
 - **B1-D6** (2026-11-04): ADR-006, esteira Jenkins com um caminho por componente (Jenkinsfile + Configuration as Code), métricas no Prometheus e dashboard no Grafana. Suíte com 76 testes, 0 falhas; mini-lab com 13 de 13; deploy do Core bloqueado por uma violação do ADR-001 (build #5).
 - **Repositórios:** a versão em camadas (AC1) permanece no repositório original. A versão modular (B1) está neste repositório, conforme orientação da professora.
 
@@ -973,7 +1158,7 @@ Seguem para a PoC da Avaliação Final:
 - **ADR-003:** IA como serviço Python independente, com timeout e trilha padrão quando ela cai.
 - **ADR-004:** eventos com outbox e RabbitMQ: o essencial nunca espera o periférico, e nada se perde.
 - **ADR-006:** esteira com um caminho por componente e métricas ligadas aos ASRs: cada decisão é verificada a cada commit e observada em funcionamento.
-- **ADR-005 (IoT):** entra quando o D5 for concluído.
+- **ADR-005:** eventos IoT por MQTT, com um gateway tradutor na borda e deduplicação por `eventoId` no Core: o Core não conhece dispositivos, e nenhum evento se perde nem conta duas vezes.
 
 Não seguem como estão, porque são decisões de laboratório ou alternativas adiadas:
 
@@ -981,4 +1166,4 @@ Não seguem como estão, porque são decisões de laboratório ou alternativas a
 - as simplificações do Jenkins (root com `docker.sock`, senha no repositório, versões sem fixar);
 - Kafka (adiado no ADR-004) e pipelines separados por componente (adiados no ADR-006).
 
-O que a PoC ainda precisa medir: carga no ranking com 100 mil usuários (ASR-02), escala do `ia-service` (ASR-08) e alertas sobre as métricas do ADR-006.
+O que a PoC ainda precisa medir ou completar: carga no ranking com 100 mil usuários (ASR-02), escala do `ia-service` (ASR-08), alertas sobre as métricas do ADR-006 e segurança da borda IoT (usuário por dispositivo, ACL e TLS no broker).

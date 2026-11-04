@@ -43,6 +43,15 @@ class ArquiteturaModularTest {
     }
 
     @Test
+    void iotSoConheceAApiPublicaDoAluno() {
+        ArchRule regra = noClasses().that().resideInAPackage(BASE + ".iot..")
+                .should().dependOnClassesThat(
+                        resideInAPackage(BASE + ".aluno..").and(resideOutsideOfPackage(BASE + ".aluno.api..")))
+                .because("o módulo iot conclui cursos só pela API pública ConclusaoDeCurso (ADR-001, ADR-005)");
+        regra.check(CLASSES);
+    }
+
+    @Test
     void alunoNaoDependeDoRanking() {
         ArchRule regra = noClasses().that().resideInAPackage(BASE + ".aluno..")
                 .should().dependOnClassesThat().resideInAPackage(BASE + ".ranking..")

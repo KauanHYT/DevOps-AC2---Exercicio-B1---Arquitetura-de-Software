@@ -1,5 +1,6 @@
 package com.grupo7.ac1final.aluno.application;
 
+import com.grupo7.ac1final.aluno.api.ConclusaoDeCurso;
 import com.grupo7.ac1final.aluno.api.ProgressoAluno;
 import com.grupo7.ac1final.aluno.api.ProgressoAlunoConsulta;
 import com.grupo7.ac1final.aluno.api.ProgressoIndividualConsulta;
@@ -16,7 +17,7 @@ import java.util.Optional;
 
 
 @Service
-public class AlunoService implements ProgressoAlunoConsulta, ProgressoIndividualConsulta {
+public class AlunoService implements ProgressoAlunoConsulta, ProgressoIndividualConsulta, ConclusaoDeCurso {
 
     private final AlunoRepositoryPort repositorio;
     private final NotificadorPromocao notificador;
@@ -88,17 +89,27 @@ public class AlunoService implements ProgressoAlunoConsulta, ProgressoIndividual
         });
     }
 
+    /** API pública usada pelo módulo iot (Desafio 5): mesma regra do PUT /concluir-curso. */
+    @Override
+    @Transactional
+    public Optional<ProgressoAluno> concluirCursoDoAluno(Long alunoId) {
+        return concluirCurso(alunoId).map(AlunoService::progressoDe);
+    }
+
     @Override
     public Optional<ProgressoAluno> buscarProgresso(Long alunoId) {
-        return repositorio.buscarPorId(alunoId)
-                .map(aluno -> new ProgressoAluno(aluno.getId(), aluno.getPlano(), aluno.getCursosConcluidos()));
+        return repositorio.buscarPorId(alunoId).map(AlunoService::progressoDe);
     }
 
     @Override
     public List<ProgressoAluno> listarMaioresProgressos(int limite) {
         return repositorio.buscarMaioresProgressos(limite)
                 .stream()
-                .map(aluno -> new ProgressoAluno(aluno.getId(), aluno.getPlano(), aluno.getCursosConcluidos()))
+                .map(AlunoService::progressoDe)
                 .toList();
+    }
+
+    private static ProgressoAluno progressoDe(Aluno aluno) {
+        return new ProgressoAluno(aluno.getId(), aluno.getPlano(), aluno.getCursosConcluidos());
     }
 }

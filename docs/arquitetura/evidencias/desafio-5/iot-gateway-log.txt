@@ -1,0 +1,31 @@
+﻿ac1-iot-gateway  | 2026-11-04 16:53:45,191 INFO [iot-gateway] iniciando; broker mosquitto:1883
+ac1-iot-gateway  | 2026-11-04 16:53:49,170 WARNING [iot-gateway] broker mosquitto:1883 indispon├¡vel; nova tentativa em instantes
+ac1-iot-gateway  | 2026-11-04 16:53:52,173 INFO [iot-gateway] conectado ao broker mosquitto:1883; assinando labs/+/dispositivos/+/eventos (QoS 1, sess├úo persistente)
+ac1-iot-gateway  | 2026-11-04 16:54:04,738 INFO [gateway] evento 598094f787f143de8d0fe0d88f2920b2 (PRESENCA, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:04,752 INFO [gateway] evento f474b682e49542a5ad732652a82177df (INICIO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:04,775 INFO [gateway] evento 5441839a8aab4aadba1e4b736fb8caff (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:06,944 INFO [gateway] evento 71630169e5e244eeb02d8286864a894b (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:06,950 INFO [gateway] evento 71630169e5e244eeb02d8286864a894b (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> DUPLICADO
+ac1-iot-gateway  | 2026-11-04 16:54:06,956 INFO [gateway] evento 71630169e5e244eeb02d8286864a894b (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> DUPLICADO
+ac1-iot-gateway  | 2026-11-04 16:54:14,199 INFO [gateway] evento c81d6cfeb95947598ff844cd5fb6a369 (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:14,216 INFO [gateway] evento db4d6799e65f43b3b9f480c96f7a7b6d (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:14,231 INFO [gateway] evento 1a65e35d096b487381de649b23ad2371 (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:14,245 INFO [gateway] evento 0363ae2f73b44398aa8a8d07443218c2 (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:14,260 INFO [gateway] evento 372fbc9ff566427c9e6ce03d52bf75c3 (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:14,276 INFO [gateway] evento ad6b40c5bb75488da9804059268a27ba (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:14,289 INFO [gateway] evento bdfe6323b2bf4a5aac1918f2e5b798fa (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:14,301 INFO [gateway] evento a6b7582d0a95411a813aa50178e304f8 (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:14,319 INFO [gateway] evento 4569fea8d539481d927aacd66ae5cdc3 (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:14,343 INFO [gateway] evento b63d1798b5384e8db53da4ba4f86e8ed (CONCLUSAO_ATIVIDADE, aluno 7, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:28,823 INFO [iot-gateway] iniciando; broker mosquitto:1883
+ac1-iot-gateway  | 2026-11-04 16:54:28,829 INFO [iot-gateway] conectado ao broker mosquitto:1883; assinando labs/+/dispositivos/+/eventos (QoS 1, sess├úo persistente)
+ac1-iot-gateway  | 2026-11-04 16:54:28,848 INFO [gateway] evento fafdfaa73adb4697aacef9598ed96f3f (CONCLUSAO_ATIVIDADE, aluno 8, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:28,861 INFO [gateway] evento 08234364a55a4081a3d3bf439f451936 (CONCLUSAO_ATIVIDADE, aluno 8, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:28,874 INFO [gateway] evento 1d4bbd260b454db1ba0afcbc8cdeeed2 (CONCLUSAO_ATIVIDADE, aluno 8, lab-01/leitor-07) -> REGISTRADO
+ac1-iot-gateway  | 2026-11-04 16:54:35,481 WARNING [core] Core indispon├¡vel para o evento 7958b9311f824b67a5a3a884ee36b5f4: <urlopen error [Errno -2] Name or service not known>
+ac1-iot-gateway  | 2026-11-04 16:54:35,481 WARNING [gateway] Core indispon├¡vel; nova tentativa do evento 7958b9311f824b67a5a3a884ee36b5f4 em 1 s
+ac1-iot-gateway  | 2026-11-04 16:54:40,342 WARNING [core] Core indispon├¡vel para o evento 7958b9311f824b67a5a3a884ee36b5f4: <urlopen error [Errno -2] Name or service not known>
+ac1-iot-gateway  | 2026-11-04 16:54:40,342 WARNING [gateway] Core indispon├¡vel; nova tentativa do evento 7958b9311f824b67a5a3a884ee36b5f4 em 2 s
+ac1-iot-gateway  | 2026-11-04 16:54:42,341 WARNING [core] Core indispon├¡vel para o evento 7958b9311f824b67a5a3a884ee36b5f4: <urlopen error [Errno 111] Connection refused>
+ac1-iot-gateway  | 2026-11-04 16:54:42,342 WARNING [gateway] Core indispon├¡vel; nova tentativa do evento 7958b9311f824b67a5a3a884ee36b5f4 em 4 s
+ac1-iot-gateway  | 2026-11-04 16:54:46,499 INFO [gateway] evento 7958b9311f824b67a5a3a884ee36b5f4 (CONCLUSAO_ATIVIDADE, aluno 8, lab-01/leitor-07) -> REGISTRADO

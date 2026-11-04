@@ -64,6 +64,35 @@ services:
     ports:
       - "8001:8001"
 
+  # B1 / ADR-005: broker MQTT dos dispositivos dos laboratórios.
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: ac1-mosquitto
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "1883:1883"
+
+  # B1 / ADR-005: traduz o MQTT dos dispositivos para o POST /iot/eventos do Core.
+  # Sessão persistente: com o gateway fora, o broker guarda as mensagens.
+  iot-gateway:
+    build:
+      context: ./iot-gateway
+    container_name: ac1-iot-gateway
+    environment:
+      MQTT_HOST: mosquitto
+      CORE_URL: http://backend:8080
+
+  # B1 / ADR-005: simulador de dispositivo, só para o mini-lab (perfil "lab").
+  #   docker compose run --rm iot-simulador --aluno 7 --conclusoes 1
+  iot-simulador:
+    build:
+      context: ./iot-gateway
+    profiles: ["lab"]
+    entrypoint: ["python", "-m", "app.simulador"]
+    environment:
+      MQTT_HOST: mosquitto
+
   backend:
     build:
       context: .

@@ -49,9 +49,10 @@ class ArquiteturaHexagonalTest {
 
     @Test
     void somenteOAdapterDePersistenciaUsaJpa() {
-        ArchRule regra = noClasses().that().resideOutsideOfPackage(ALUNO + ".adapter.persistence..")
+        // D5: a regra vale para qualquer módulo que tenha adapter de persistência (aluno e iot)
+        ArchRule regra = noClasses().that().resideOutsideOfPackage("..adapter.persistence..")
                 .should().dependOnClassesThat().resideInAnyPackage("jakarta.persistence..", "org.springframework.data..")
-                .because("trocar o banco ou o ORM deve afetar apenas um pacote");
+                .because("trocar o banco ou o ORM deve afetar apenas o adapter de persistência de cada módulo");
         regra.check(CLASSES);
     }
 }

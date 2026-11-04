@@ -1,0 +1,63 @@
+# Mini-lab Desafio 5 - eventos IoT: MQTT -> iot-gateway -> Core
+# Executado em 2026-11-04 13:52:43
+
+## Cenário 1 - Fluxo normal: presença, início e conclusão
+   [leitor-07] publicado 598094f7 t=P aluno=7 71 bytes
+   [leitor-07] publicado f474b682 t=I aluno=7 71 bytes
+   [leitor-07] publicado 5441839a t=C aluno=7 71 bytes
+   [leitor-07] 3 mensagem(ns) publicada(s) em labs/lab-01/dispositivos/leitor-07/eventos, payload médio de 71 bytes
+   Core: 3 eventos registrados para o aluno 7 em 0,1 s | cursosConcluidos=1
+   [OK]     os 3 eventos (presença, início, conclusão) chegaram ao Core pelo MQTT
+   [OK]     só a conclusão somou curso (cursosConcluidos = 1)
+   [OK]     payload do dispositivo pequeno (71 bytes por evento, abaixo de 100)
+
+## Cenário 2 - Retransmissão: a mesma conclusão enviada 3 vezes (QoS 1 = pelo menos uma vez)
+   [leitor-07] publicado 71630169 t=C aluno=7 71 bytes
+   [leitor-07] publicado 71630169 t=C aluno=7 71 bytes (reenvio do mesmo id)
+   [leitor-07] publicado 71630169 t=C aluno=7 71 bytes (reenvio do mesmo id)
+   [leitor-07] 3 mensagem(ns) publicada(s) em labs/lab-01/dispositivos/leitor-07/eventos, payload médio de 71 bytes
+   Core: cursosConcluidos=2 | gateway: 2 entrega(s) respondida(s) como DUPLICADO
+   [OK]     3 envios do mesmo evento somaram 1 curso (cursosConcluidos = 2)
+   [OK]     as 2 repetições foram reconhecidas como DUPLICADO pelo Core
+
+## Cenário 3 - Dispositivo offline: 10 conclusões guardadas no aparelho e enviadas ao reconectar
+   [leitor-07] sem conexão: 10 evento(s) guardado(s) na memória do dispositivo
+   [leitor-07] conexão de volta: enviando o que estava guardado
+   [leitor-07] publicado c81d6cfe t=C aluno=7 71 bytes
+   [leitor-07] publicado db4d6799 t=C aluno=7 71 bytes
+   [leitor-07] publicado 1a65e35d t=C aluno=7 71 bytes
+   [leitor-07] publicado 0363ae2f t=C aluno=7 71 bytes
+   [leitor-07] publicado 372fbc9f t=C aluno=7 71 bytes
+   [leitor-07] publicado ad6b40c5 t=C aluno=7 71 bytes
+   [leitor-07] publicado bdfe6323 t=C aluno=7 71 bytes
+   [leitor-07] publicado a6b7582d t=C aluno=7 71 bytes
+   [leitor-07] publicado 4569fea8 t=C aluno=7 71 bytes
+   [leitor-07] publicado b63d1798 t=C aluno=7 71 bytes
+   [leitor-07] 10 mensagem(ns) publicada(s) em labs/lab-01/dispositivos/leitor-07/eventos, payload médio de 71 bytes
+   Core: cursosConcluidos=12 plano=PREMIUM voucher=True em 0 s
+   [OK]     as 10 conclusões chegaram e o aluno virou PREMIUM com 12 cursos
+   D4: notificação da promoção entregue 0 s depois (outbox -> RabbitMQ -> notificacao-service)
+   [OK]     a promoção vinda do laboratório seguiu o fluxo do D4 (notificado=true)
+
+## Cenário 4 - iot-gateway fora do ar: o broker guarda as mensagens
+   > docker compose stop iot-gateway
+   [leitor-07] publicado fafdfaa7 t=C aluno=8 71 bytes
+   [leitor-07] publicado 08234364 t=C aluno=8 71 bytes
+   [leitor-07] publicado 1d4bbd26 t=C aluno=8 71 bytes
+   [leitor-07] 3 mensagem(ns) publicada(s) em labs/lab-01/dispositivos/leitor-07/eventos, payload médio de 71 bytes
+   Core, com o gateway fora: cursosConcluidos=0
+   > docker compose start iot-gateway
+   Core, depois de religar: cursosConcluidos=3 em 1,1 s
+   [OK]     com o gateway fora, nada chegou ao Core (e nada se perdeu)
+   [OK]     as 3 mensagens guardadas no broker chegaram quando o gateway voltou
+
+## Cenário 5 - Core fora do ar: o gateway segura a mensagem e tenta de novo
+   > docker compose stop backend
+   [leitor-07] publicado 7958b931 t=C aluno=8 71 bytes
+   [leitor-07] 1 mensagem(ns) publicada(s) em labs/lab-01/dispositivos/leitor-07/eventos, payload médio de 71 bytes
+   gateway, com o Core fora: 1 aviso(s) de nova tentativa no log
+   > docker compose start backend
+   Core, depois de voltar: cursosConcluidos=4 em 1,1 s
+   [OK]     o evento enviado com o Core fora foi entregue quando ele voltou
+
+## Resultado: 10 de 10 verificações passaram
