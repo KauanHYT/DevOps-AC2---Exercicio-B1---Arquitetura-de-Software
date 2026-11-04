@@ -2,11 +2,13 @@ package com.grupo7.ac1final.aluno.adapter.web;
 
 import com.grupo7.ac1final.aluno.application.AlunoService;
 import com.grupo7.ac1final.aluno.application.DadosCadastroAluno;
+import com.grupo7.ac1final.aluno.application.port.NotificacaoIndisponivelException;
 import com.grupo7.ac1final.aluno.domain.Aluno;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -73,6 +75,16 @@ public class AlunoController {
     @PutMapping("/{id}/notificar")
     public ResponseEntity<AlunoDTO> notificarMudancaPlano(@PathVariable Long id) {
         return resposta(alunoService.registrarNotificacaoMudancaPlano(id));
+    }
+
+    /**
+     * Só acontece no modo síncrono (alternativa A do ADR-004): a notificação falhou e,
+     * junto com ela, a conclusão do curso foi desfeita.
+     */
+    @ExceptionHandler(NotificacaoIndisponivelException.class)
+    public ResponseEntity<Map<String, String>> notificacaoIndisponivel() {
+        return ResponseEntity.status(503).body(Map.of(
+                "mensagem", "Serviço de notificação indisponível: a conclusão do curso não foi registrada."));
     }
 
     private ResponseEntity<AlunoDTO> resposta(Optional<Aluno> aluno) {
