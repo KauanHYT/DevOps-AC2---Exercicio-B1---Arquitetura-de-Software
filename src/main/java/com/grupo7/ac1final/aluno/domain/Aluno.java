@@ -55,6 +55,10 @@ public class Aluno {
         return plano;
     }
 
+    public boolean isPremium() {
+        return "PREMIUM".equals(plano);
+    }
+
     public boolean isPossuiVoucher() {
         return possuiVoucher;
     }

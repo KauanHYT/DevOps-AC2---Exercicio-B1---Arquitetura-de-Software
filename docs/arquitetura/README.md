@@ -11,7 +11,7 @@ Regra de ouro usada na revisão: o C4 é explicado pelo ADR; o ADR é sustentado
 | 1 | Drivers e evolução do Core | [ADR-001](#18-adr-001--monólito-modular-para-o-core) | [Container](#19-c4--container) | [desafio-1](evidencias/desafio-1) | Concluído |
 | 2 | Organização interna do Core | [ADR-002](#28-adr-002--ports--adapters-no-módulo-aluno) | [Component](#29-c4--component-do-core) | [desafio-2](evidencias/desafio-2) | Concluído |
 | 3 | Serviço Python e IA | [ADR-003](#38-adr-003--serviço-python-independente-para-a-ia) | [Container](#39-c4--container-fronteira-da-ia-e-protocolos) | [desafio-3](evidencias/desafio-3) | Concluído |
-| 4 | Comunicação e eventos | — | — | — | Pendente |
+| 4 | Comunicação e eventos | [ADR-004](#48-adr-004--notificação-assíncrona-com-rabbitmq-e-outbox-transacional) | [Container + sequência](#49-c4--container-e-sequência-do-fluxo-crítico) | [desafio-4](evidencias/desafio-4) | Concluído |
 | 5 | IoT e MQTT | — | — | — | Pendente |
 | 6 | CI/CD e observabilidade | — | — | — | Pendente |
 
@@ -45,6 +45,8 @@ Regra de ouro usada na revisão: o C4 é explicado pelo ADR; o ADR é sustentado
 | RPC-05 | Ambiente de execução em Docker Compose | Infraestrutura |
 | RPC-06 | ML e RAG/LLM são implementados em Python (a partir do D3) | Tecnologia |
 | RPC-07 | A indisponibilidade da IA não pode bloquear o fluxo essencial (a partir do D3) | Premissa de negócio |
+| RPC-08 | As operações essenciais do Core concluem mesmo com um consumidor externo indisponível (a partir do D4) | Premissa de negócio |
+| RPC-09 | Adotar um broker exige custo operacional (a partir do D4) | Operação |
 
 ---
 
@@ -62,7 +64,10 @@ Só entram aqui RNFs capazes de alterar estrutura, comunicação, dados, implant
 | ASR-06 | Um modelo novo (recomendação ou assistente) vai para produção sem rebuild nem redeploy do Core | Deploy independente / **S** (+ implantação) | D3 | Implantação | ADR-003 | Container `ia-service` próprio + `modeloVersao` em cada resposta | Atendido |
 | ASR-07 | Com a IA fora do ar ou lenta, o fluxo essencial responde normalmente; a recomendação degrada em até 2 s e o assistente informa indisponibilidade | Tolerância a falhas / **R** | D3 | Comunicação | ADR-003 | `IaApiIntegrationTest`, `IaHttpClientTest`, `lab-ia.ps1` | Atendido |
 | ASR-08 | Picos de uso da IA são absorvidos escalando só o `ia-service` (sem estado, sem banco do Core) | Escalabilidade / **P** | D3 | Implantação | ADR-003 | Serviço stateless; o Core envia o contexto | Parcial: escala a medir no D6 |
-| ASR-09… | Eventos, idempotência, observabilidade… | — | D4–D6 | — | — | — | A definir |
+| ASR-09 | Com o consumidor de notificação ou o broker fora do ar, a conclusão de curso responde 200 e a recompensa é aplicada | Disponibilidade / tolerância a falhas / **R** | D4 | Comunicação | ADR-004 | `NotificacaoAssincronaIntegrationTest`, `lab-eventos.ps1` (cenários 1 e 2) | Atendido |
+| ASR-10 | Nenhuma promoção fica sem notificação: o evento é entregue quando o consumidor ou o broker voltam (pelo menos uma vez) | Recuperabilidade / **R** | D4 | Dados, operação | ADR-004 | Outbox + fila durável; `lab-eventos.ps1` | Atendido |
+| ASR-11 | Conclusão, recompensa e registro do evento são atômicos; só a entrega da notificação é eventual | Consistência / **R** (integridade) | D4 | Dados | ADR-004 | Outbox na mesma transação; `NotificacaoSincronaIntegrationTest` mostra a alternativa | Atendido |
+| ASR-12… | IoT (conectividade intermitente, idempotência de eventos), observabilidade… | — | D5–D6 | — | — | — | A definir |
 
 ---
 
@@ -501,14 +506,188 @@ flowchart TB
 
 ---
 
+# Desafio 4 — Comunicação e eventos
+
+**Pergunta:** onde o sincronismo é necessário e onde eventos reduzem o acoplamento? Ao concluir um curso, o sistema registra a conclusão, calcula as recompensas e pode disparar notificação e analytics. A notificação falhar não pode impedir a conclusão.
+
+## 4.1 RF
+
+- **RF02 Conquistas:** a conclusão do 12º curso promove o aluno a PREMIUM, com voucher (US 2).
+- **RF05 Notificações:** o aluno é avisado da promoção (US 3). Antes era um `PUT /notificar` que o frontend chamava na mão; agora a notificação reage ao evento `AlunoPromovidoPremium`.
+- **Eventos associados à conclusão de atividades:** o evento fica disponível para novos consumidores, como analytics, sem mudar o Core.
+
+## 4.2 RNF analisados (FURPS+)
+
+| RNF | FURPS+ | Leitura no cenário | Vira ASR? |
+|---|---|---|---|
+| Tolerância a falhas / disponibilidade | R | O consumidor externo (notificação) ou o broker podem cair | **Sim → ASR-09** |
+| Recuperabilidade | R | Uma promoção não pode ficar sem notificação depois que a falha passa | **Sim → ASR-10** |
+| Consistência | R (integridade) | Conclusão e recompensa não podem divergir; a notificação pode chegar depois | **Sim → ASR-11** |
+| Latência | P | Com o consumidor no ar, as duas formas respondem rápido (mini-lab, 12º curso: 261 ms e 37 ms nos cenários assíncronos, 38 ms no síncrono) | Não: no caminho feliz a diferença é pequena e varia entre execuções; o que muda é o comportamento sob falha |
+| Desacoplamento | S | O Core não deveria conhecer cada consumidor | Não: é o efeito da decisão, verificado pela regra ArchUnit |
+
+## 4.3 ASRs selecionados (máx. 3)
+
+1. **ASR-09 Disponibilidade do fluxo essencial.** Altera a **comunicação**: a notificação sai do caminho síncrono da conclusão de curso.
+2. **ASR-10 Recuperabilidade.** Altera **dados e operação**: o evento fica guardado de forma durável (outbox no banco e fila durável no broker) e é entregue quando a falha passa, pelo menos uma vez.
+3. **ASR-11 Consistência.** Altera os **dados**: a conclusão, a recompensa e o registro do evento acontecem na **mesma transação**; só a entrega é eventual.
+
+## 4.4 RPCs aplicáveis
+
+- **RPC-08:** as operações essenciais do Core devem concluir mesmo com um consumidor externo indisponível.
+- **RPC-09:** adotar um broker tem custo operacional (mais um container para operar, monitorar e atualizar).
+- RPC-02 (equipe de 6) e RPC-05 (Docker Compose) continuam valendo e pesam contra soluções mais pesadas.
+
+## 4.5 Decisão do Tech Lead
+
+- **Qual resposta precisa ser imediata?** A conclusão do curso e a recompensa (PREMIUM e voucher): o aluno sai da requisição vendo o plano novo.
+- **Qual pode ser eventual?** A notificação da promoção, entregue em segundos, e qualquer consumidor futuro (analytics, ranking em cache).
+- **Que ASR justifica mensageria?** O ASR-10, somado ao fato de o consumidor ser **outro processo**. Um evento interno do Spring (`@Async`) tira a notificação do caminho, mas perde o evento se a aplicação cair e não alcança outro serviço. Fazer retry de HTTP dentro do Core seria reimplementar uma fila. O broker entrega durabilidade, reentrega e desacoplamento prontos.
+- **RabbitMQ ou Kafka resolvem um problema real?** O RabbitMQ resolve o nosso: uma fila de trabalho com confirmação por mensagem, durável, com reentrega e roteamento por tópico, num container leve. O Kafka resolve outro problema (log retido para replay, alta vazão, muitos grupos de consumidores), com custo operacional maior (RPC-09) para um fluxo de poucos eventos e um consumidor só. Fica como gatilho, caso o analytics precise reprocessar o histórico.
+- **E se o próprio broker cair?** Gravar no banco e publicar no broker não é uma operação atômica: é o problema do *dual write*. Por isso o evento é gravado numa tabela **outbox** na mesma transação da conclusão, e um relay publica no RabbitMQ depois. Com o broker fora, o evento espera no banco.
+
+## 4.6 Alternativas e trade-offs
+
+| | (A) REST síncrono | (B) Evento interno do Spring | **(C) RabbitMQ + outbox** | (D) Kafka + outbox |
+|---|---|---|---|---|
+| Como fica | O Core chama `POST /notificacoes` dentro da conclusão | `@TransactionalEventListener` + `@Async` no próprio Core | Evento no outbox (mesma transação) → relay → fila durável → `notificacao-service` | Igual a (C), com tópico Kafka |
+| Ganha | Simples; o aluno sai notificado | Sem broker; a resposta não espera a notificação | A conclusão nunca falha pela notificação; nada se perde; consumidores independentes | Replay, alta vazão, vários grupos de consumidores |
+| Perde | Consumidor fora = conclusão desfeita (503) | Evento só em memória: perdido se o Core cair; não chega a outro processo | +1 broker para operar; entrega pelo menos uma vez (consumidor idempotente); notificação eventual | Cluster mais pesado; sem necessidade de replay hoje (RPC-09) |
+| ASR-09 / 10 / 11 | ✗ / ✓ / ✓ | ✓ / ✗ / parcial | ✓ / ✓ / ✓ | ✓ / ✓ / ✓ |
+| Veredito | Rejeitada; mantida só para o mini-lab comparar | Rejeitada | **Escolhida** | Adiada (gatilho no ADR-004) |
+
+## 4.7 Evidência (mini-lab)
+
+**Hipótese:** com a notificação fora do caminho síncrono e o evento gravado no outbox, a conclusão de curso responde 200 com o consumidor ou o broker indisponíveis, e a notificação chega quando a falha passa. No modo síncrono, a mesma falha desfaz a conclusão.
+
+**Testes automatizados (`./mvnw test` e `pytest`)**
+
+| Teste | O que prova |
+|---|---|
+| [`PromocaoPremiumTest`](../../src/test/java/com/grupo7/ac1final/aluno/application/PromocaoPremiumTest.java) | Exatamente um evento no 12º curso, e nenhum para quem já era PREMIUM; no modo assíncrono, promove na hora e só marca "notificado" depois; no síncrono, marca na hora; a falha do notificador síncrono propaga, para desfazer a transação |
+| [`NotificacaoAssincronaIntegrationTest`](../../src/test/java/com/grupo7/ac1final/aluno/adapter/web/NotificacaoAssincronaIntegrationTest.java) | Spring + H2, sem broker nem consumidor: 13 conclusões com 200, PREMIUM imediato, um único evento no outbox; o `PUT /notificar` do consumidor fecha o ciclo |
+| [`NotificacaoSincronaIntegrationTest`](../../src/test/java/com/grupo7/ac1final/aluno/adapter/http/NotificacaoSincronaIntegrationTest.java) | Alternativa (A): com a notificação fora, o 12º curso responde 503 e o aluno continua com 11 cursos e BASICO; com ela de volta, passa e já sai notificado |
+| `OutboxJpaTest`, `OutboxNotificadorPromocaoTest` | Outbox real (JPA): o evento fica pendente até ser publicado e as tentativas que falham são contadas; a mensagem segue o contrato JSON do consumidor |
+| [`ArquiteturaEventosTest`](../../src/test/java/com/grupo7/ac1final/arquitetura/ArquiteturaEventosTest.java) | A aplicação não conhece broker nem HTTP; só `aluno.adapter.mensageria` conhece o RabbitMQ; o evento de domínio é Java puro |
+| [`notificacao-service/tests`](../../notificacao-service/tests) (pytest, 10 testes) | Notificação idempotente por `eventoId`; com o Core fora, a mensagem volta para a fila; mensagem inválida é descartada; topologia igual à do Core |
+
+![mvn test do Desafio 4: 73 testes, 0 falhas](evidencias/desafio-4/mvn-test-d4.png)
+
+**Mini-lab com Docker:** o script [`labs/desafio-4/lab-eventos.ps1`](../../labs/desafio-4/lab-eventos.ps1) roda 3 cenários e confere 13 verificações. Resultado: **13 de 13**, em [`evidencias/desafio-4/lab-resultado.txt`](evidencias/desafio-4/lab-resultado.txt).
+
+| Cenário | Resultado obtido |
+|---|---|
+| 1. Assíncrono, `docker compose stop notificacao-service` | 12 conclusões com 200; PREMIUM e voucher na hora; `notificado=false`; 1 mensagem esperando na fila; ao religar o consumidor, notificado em 1,1 s, com uma notificação só |
+| 2. Assíncrono, `docker compose stop rabbitmq` | 12 conclusões com 200; 1 evento pendente no outbox; ao religar o broker, o relay publicou, o consumidor entregou em 5,2 s e o outbox esvaziou |
+| 3. Síncrono (`NOTIFICACAO_MODO=sincrono`), consumidor fora | 12º curso com **503 em 2610 ms**, e a conclusão foi desfeita (11 cursos, BASICO); com o consumidor de volta, passou (200 em 38 ms) e já saiu notificado |
+
+**Sobre os tempos de entrega:** os 5,2 s do cenário 2 incluem a subida do broker, a reconexão do consumidor (que tenta a cada 3 s) e o intervalo do relay (2 s). No cenário 1, o broker já estava no ar e a mensagem chegou assim que o consumidor reconectou.
+
+**Observação do cenário 3:** depois de o `notificacao-service` voltar a responder, o Core ainda recusou a conclusão por **8,1 s (5 tentativas)**. A JVM guarda por cerca de 10 s a falha de DNS do nome do serviço (cache negativo), então o modo síncrono continua falhando por um tempo mesmo depois de a dependência voltar. No modo assíncrono, essa janela não chega ao aluno.
+
+**Como reproduzir**
+```bash
+./mvnw test -Dtest="PromocaoPremiumTest,Notificacao*IntegrationTest,OutboxJpaTest,ArquiteturaEventosTest"
+cd notificacao-service && pip install -r requirements-dev.txt && pytest
+powershell -ExecutionPolicy Bypass -File labs/desafio-4/lab-eventos.ps1
+```
+
+## 4.8 ADR-004 — Notificação assíncrona com RabbitMQ e outbox transacional
+
+- **Status:** Aceito (2026-11-03).
+- **Contexto:** a promoção para PREMIUM precisa disparar a notificação da US 3, que antes dependia de uma chamada manual. A conclusão do curso é a operação essencial e não pode falhar por causa de um consumidor externo (RPC-08).
+- **ASRs / RPCs:** ASR-09, ASR-10, ASR-11 · RPC-08, RPC-09.
+- **Alternativas:** (A) REST síncrono; (B) evento interno do Spring; (C) RabbitMQ + outbox; (D) Kafka + outbox. A comparação está em 4.6.
+- **Decisão:** adotar **(C)**.
+  - O domínio emite o fato `AlunoPromovidoPremium`, com um `eventoId` único.
+  - O caso de uso entrega o evento à porta `NotificadorPromocao`. O adapter padrão grava o evento na tabela `outbox_eventos`, na mesma transação da conclusão.
+  - O `OutboxRelay` publica a cada 2 s na exchange `gamificacao.eventos` (rota `aluno.promovido-premium`), que leva à fila durável `notificacao.aluno-promovido`, com mensagens persistentes (padrão do Spring AMQP).
+  - O `notificacao-service` (Python) consome, notifica de forma idempotente por `eventoId`, avisa o Core por `PUT /alunos/{id}/notificar` e só então confirma a mensagem (`ack`).
+  - O backend não declara `depends_on` nem para o broker nem para o consumidor.
+  - A alternativa (A) fica disponível só por configuração (`NOTIFICACAO_MODO=sincrono`), para o mini-lab.
+- **Consequências:**
+  - (+) A conclusão de curso não depende de nada fora do Core e do banco. No mini-lab, as 24 conclusões dos cenários 1 e 2 responderam 200, enquanto a alternativa (A) devolveu 503 e ainda levou 8,1 s para se recuperar depois de o serviço voltar.
+  - (+) Nenhuma promoção fica sem notificação: o evento espera no outbox ou na fila.
+  - (+) Novos consumidores (analytics) assinam a exchange sem mudar o Core.
+  - (−) A notificação é eventual: chega segundos depois, não na mesma resposta.
+  - (−) A entrega é "pelo menos uma vez", então todo consumidor precisa ser idempotente.
+  - (−) Mais um container para operar (RPC-09), uma tabela a mais e um relay por polling (até 2 s de atraso).
+  - (−) Sem *publisher confirms* nem fila de mensagens mortas (DLQ): uma mensagem inválida é descartada pelo consumidor.
+- **Revisitar quando:**
+  - o analytics precisar reprocessar o histórico de eventos: avaliar Kafka (D);
+  - o volume de eventos tornar o polling caro: avaliar CDC (Debezium);
+  - o D6 mostrar mensagens descartadas: adicionar DLQ e *publisher confirms*.
+
+## 4.9 C4 — Container e sequência do fluxo crítico
+
+```mermaid
+flowchart TB
+    usuario["Aluno / Administrador<br/>[Pessoa]"]
+
+    subgraph plataforma["Plataforma Educação Continuada Gamificada [Sistema]"]
+        spa["Frontend Web<br/>[Container: Vue.js + Nginx]"]
+        core["API Core<br/>[Container: Java 21 / Spring Boot 4.1]<br/>Monólito modular: aluno, ranking, ia<br/>+ outbox e relay"]
+        db[("Banco de dados<br/>[Container: PostgreSQL 17]<br/>alunos + outbox_eventos")]
+        ia["ia-service<br/>[Container: Python 3.12 / FastAPI]"]
+        mq["RabbitMQ<br/>[Container: broker AMQP]<br/>exchange gamificacao.eventos<br/>fila durável notificacao.aluno-promovido"]
+        notif["notificacao-service<br/>[Container: Python 3.12 / FastAPI + pika]<br/>idempotente por eventoId"]
+    end
+
+    usuario -- "Usa<br/>[navegador]" --> spa
+    spa -- "API REST<br/>[HTTP/JSON :8080]" --> core
+    core -- "Conclusão + evento na mesma transação<br/>[JDBC/JPA :5432]" --> db
+    core -- "[HTTP/JSON :8000]" --> ia
+    core -- "Relay publica AlunoPromovidoPremium<br/>[AMQP :5672]" --> mq
+    mq -- "Entrega a mensagem<br/>[AMQP]" --> notif
+    notif -- "PUT /alunos/{id}/notificar<br/>[HTTP/JSON :8080]" --> core
+    core -. "Só no modo síncrono (alternativa A)<br/>POST /notificacoes [HTTP/JSON :8001]" .-> notif
+
+    classDef pessoa fill:#08427b,stroke:#052e56,color:#fff
+    classDef container fill:#1168bd,stroke:#0b4884,color:#fff
+    classDef novo fill:#2e7d32,stroke:#1b5e20,color:#fff
+    class usuario pessoa
+    class spa,core,db,ia container
+    class mq,notif novo
+```
+
+**Sequência do fluxo crítico** (12º curso, modo assíncrono):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Aluno
+    participant Core as API Core
+    participant DB as PostgreSQL
+    participant Relay as OutboxRelay (no Core)
+    participant MQ as RabbitMQ
+    participant Notif as notificacao-service
+
+    Aluno->>Core: PUT /alunos/{id}/concluir-curso (12º curso)
+    Core->>DB: transação: aluno PREMIUM + voucher e evento em outbox_eventos
+    Core-->>Aluno: 200 OK, plano PREMIUM (não espera a notificação)
+    loop a cada 2 s
+        Relay->>DB: busca eventos pendentes
+        Relay->>MQ: publica AlunoPromovidoPremium
+        Relay->>DB: marca publicado_em
+    end
+    MQ->>Notif: entrega a mensagem
+    Notif->>Notif: envia a notificação (ignora eventoId repetido)
+    Notif->>Core: PUT /alunos/{id}/notificar
+    Core->>DB: notificadoMelhoriaPlano = true
+    Notif-->>MQ: ack
+    Note over MQ,Notif: consumidor fora: a mensagem espera na fila
+    Note over Relay,MQ: broker fora: o evento espera no outbox
+```
+
+---
+
 # Próximos desafios: hipóteses herdadas, ainda não decididas
 
 O registro da AC2 antecipou algumas decisões sem o padrão completo. Elas ficam aqui só como **hipóteses**. Cada uma será decidida no seu desafio, com ASRs, alternativas e evidência próprias.
 
 | Desafio | Hipótese de partida | Gancho já existente no código |
 |---|---|---|
-| D4 — Eventos | A notificação da US 3 sai do `PUT /notificar` manual e passa a reagir ao evento "aluno virou PREMIUM" | `AlunoService.concluirCurso` é o ponto de publicação |
-| D5 — IoT | MQTT + gateway chamando o Core | `PUT /concluir-curso` **não é idempotente** (cada chamada soma 1), o que vira ASR de deduplicação |
+| D5 — IoT | MQTT + gateway chamando o Core | `PUT /concluir-curso` **não é idempotente** (cada chamada soma 1), o que vira ASR de deduplicação; o RabbitMQ do D4 tem plugin MQTT (avaliar se um broker só atende) |
 | D6 — CI/CD | Jenkins rodando `./mvnw verify` (inclui ArchUnit) antes da imagem; Prometheus medindo `/ranking` e `/concluir-curso` | Valida o ASR-02 e protege ADR-001/002 no pipeline |
 
 # Histórico
@@ -517,8 +696,9 @@ O registro da AC2 antecipou algumas decisões sem o padrão completo. Elas ficam
 - **B1-D1** (2026-11-01): ADR-001, módulos `aluno` e `ranking`.
 - **B1-D2** (2026-11-01): ADR-002, Ports & Adapters no módulo `aluno`. Suíte completa validada em 2026-11-02 (39 testes, 0 falhas).
 - **B1-D3** (2026-11-03): ADR-003, `ia-service` (FastAPI) e módulo `ia` no Core com timeout e fallback.
+- **B1-D4** (2026-11-03): ADR-004, notificação assíncrona com outbox, RabbitMQ e `notificacao-service`. Suíte completa com 73 testes, 0 falhas; mini-lab com 13 de 13 verificações.
 - **Repositórios:** a versão em camadas (AC1) permanece no repositório original. A versão modular (B1) está neste repositório, conforme orientação da professora.
 
 # Síntese para a PoC da AF
 
-*A preencher ao final do B1.* Até aqui seguem para a PoC: ADR-001 (monólito modular com fronteiras testadas), ADR-002 (domínio isolado por portas) e ADR-003 (IA como serviço independente, com degradação controlada).
+*A preencher ao final do B1.* Até aqui seguem para a PoC: ADR-001 (monólito modular com fronteiras testadas), ADR-002 (domínio isolado por portas), ADR-003 (IA como serviço independente, com degradação controlada) e ADR-004 (eventos com outbox: o essencial nunca espera o periférico).

@@ -120,17 +120,23 @@ ac1final/
 │   ├── main/java/com/grupo7/ac1final/
 │   │   ├── aluno/                          ← módulo aluno
 │   │   │   ├── api/                        ← API pública do módulo (usada pelo ranking)
-│   │   │   ├── domain/Aluno.java           ← regras US 1–4 (Java puro)
-│   │   │   ├── application/                ← casos de uso + porta AlunoRepositoryPort
+│   │   │   ├── domain/                     ← Aluno.java (regras US 1–4) e evento AlunoPromovidoPremium (Java puro)
+│   │   │   ├── application/                ← casos de uso + portas AlunoRepositoryPort e NotificadorPromocao
 │   │   │   └── adapter/
 │   │   │       ├── web/                    ← AlunoController, AlunoDTO
-│   │   │       └── persistence/            ← AlunoEntity, AlunoJpaRepository, AlunoPersistenceAdapter
-│   │   └── ranking/                        ← módulo ranking (GET /ranking)
+│   │   │       ├── persistence/            ← AlunoEntity, AlunoJpaRepository, AlunoPersistenceAdapter + outbox/ (ADR-004)
+│   │   │       ├── mensageria/             ← OutboxRelay e topologia do RabbitMQ (ADR-004)
+│   │   │       └── http/                   ← alternativa síncrona, só para o mini-lab (ADR-004)
+│   │   ├── ranking/                        ← módulo ranking (GET /ranking)
+│   │   └── ia/                             ← módulo ia: portas + adapter HTTP para o ia-service (ADR-003)
 │   └── test/java/com/grupo7/ac1final/
 │       ├── aluno/                          ← domínio, casos de uso, contrato da porta, integração
 │       ├── ranking/
-│       └── arquitetura/                    ← regras ArchUnit (ADR-001 e ADR-002)
+│       └── arquitetura/                    ← regras ArchUnit (ADR-001 a ADR-004)
 ├── docs/arquitetura/                       ← registro arquitetural do B1
+├── ia-service/                             ← serviço Python/FastAPI de IA (ADR-003)
+├── notificacao-service/                    ← consumidor RabbitMQ da promoção para PREMIUM (ADR-004)
+├── labs/                                   ← scripts dos mini-labs (geram as evidências)
 ├── frontend/
 ├── Dockerfile
 ├── docker-compose.yaml
@@ -264,10 +270,12 @@ http://localhost:8080/alunos
 | DELETE | `/alunos/{id}` | Exclui um aluno |
 | PUT | `/alunos/{id}/concluir-curso` | Registra a conclusão de um curso |
 | PUT | `/alunos/{id}/liberar-cursos?media=7.5` | Libera 3 cursos adicionais **se a média for ≥ 7,0** (B1/ADR-002) |
-| PUT | `/alunos/{id}/notificar` | Registra a notificação de mudança para PREMIUM |
+| PUT | `/alunos/{id}/notificar` | Registra a notificação de mudança para PREMIUM (desde o B1/ADR-004, chamado pelo `notificacao-service` ao entregar o evento) |
 | GET | `/ranking?limite=10` | Ranking por cursos concluídos (B1/ADR-001) |
+| GET | `/alunos/{id}/recomendacoes?limite=3` | Recomendação de cursos pela IA; se a IA cair, devolve a trilha padrão (`origem: PADRAO`) (B1/ADR-003) |
+| POST | `/alunos/{id}/assistente` | Assistente educacional, corpo `{"pergunta": "..."}`; 503 se a IA estiver fora (B1/ADR-003) |
 
-Ao atingir **12 cursos concluídos**, o endpoint de conclusão de curso atualiza o plano para `PREMIUM` e registra o voucher.
+Ao atingir **12 cursos concluídos**, o endpoint de conclusão de curso atualiza o plano para `PREMIUM` e registra o voucher. Desde o B1 (ADR-004), essa promoção também gera o evento `AlunoPromovidoPremium`, e a notificação chega de forma assíncrona.
 
 ---
 
@@ -398,13 +406,16 @@ O frontend é servido pelo Nginx quando executado com Docker.
 
 # Docker
 
-A aplicação foi preparada para execução utilizando **Docker Compose**, com quatro serviços:
+A aplicação foi preparada para execução utilizando **Docker Compose**. Na AC1 eram quatro serviços; o B1 acrescenta o `ia-service` (Desafio 3), o RabbitMQ e o `notificacao-service` (Desafio 4):
 
 ```text
 Frontend VueJS + Nginx  → localhost:5173
 Backend Spring Boot     → localhost:8080
 PostgreSQL              → localhost:5432
 PGAdmin                 → localhost:5050
+ia-service (FastAPI)    → localhost:8000   (B1 / Desafio 3)
+RabbitMQ                → localhost:5672 (AMQP) e 15672 (painel)   (B1 / Desafio 4)
+notificacao-service     → localhost:8001   (B1 / Desafio 4)
 ```
 
 ## Serviços
@@ -415,6 +426,9 @@ PGAdmin                 → localhost:5050
 | Backend | `ac1-backend` | 8080 |
 | PostgreSQL | `ac1-postgres` | 5432 |
 | PGAdmin | `ac1-pgadmin` | 5050 |
+| ia-service | `ac1-ia` | 8000 |
+| RabbitMQ | `ac1-rabbitmq` | 5672 / 15672 |
+| notificacao-service | `ac1-notificacao` | 8001 |
 
 ## Executando com Docker
 
@@ -465,6 +479,9 @@ docker compose down -v
 | OpenAPI | http://localhost:8080/v3/api-docs |
 | PGAdmin | http://localhost:5050 |
 | PostgreSQL | localhost:5432 |
+| ia-service (Swagger do FastAPI) | http://localhost:8000/docs |
+| RabbitMQ (painel, usuário/senha `guest`) | http://localhost:15672 |
+| notificacao-service (notificações enviadas) | http://localhost:8001/notificacoes |
 
 ---
 

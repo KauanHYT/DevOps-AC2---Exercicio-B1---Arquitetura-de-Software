@@ -28,6 +28,8 @@ services:
     depends_on:
       - postgres
 
+  # B1 / ADR-003: serviço de IA independente (Python/FastAPI).
+  # O backend NÃO declara depends_on para ele: a IA fora do ar não pode impedir o Core de subir.
   ia-service:
     build:
       context: ./ia-service
@@ -37,6 +39,31 @@ services:
     ports:
       - "8000:8000"
 
+  # B1 / ADR-004: broker de eventos. O backend também NÃO depende dele para subir:
+  # com o broker fora, os eventos esperam no outbox (tabela outbox_eventos).
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: ac1-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  # B1 / ADR-004: consumidor da promoção para PREMIUM (US 3). Reconecta sozinho ao broker.
+  notificacao-service:
+    build:
+      context: ./notificacao-service
+    container_name: ac1-notificacao
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      CORE_URL: http://backend:8080
+    ports:
+      - "8001:8001"
+
   backend:
     build:
       context: .
@@ -44,6 +71,8 @@ services:
     container_name: ac1-backend
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      # assincrono (ADR-004) ou sincrono (alternativa A, só para o mini-lab)
+      NOTIFICACAO_MODO: ${NOTIFICACAO_MODO:-assincrono}
     ports:
       - "8080:8080"
     depends_on:

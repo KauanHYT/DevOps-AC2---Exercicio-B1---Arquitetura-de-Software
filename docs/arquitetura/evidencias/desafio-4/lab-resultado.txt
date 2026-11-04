@@ -1,0 +1,38 @@
+# Mini-lab Desafio 4 - interação síncrona x assíncrona na promoção para PREMIUM
+# Executado em 2026-11-03 22:17:49
+
+## Cenário 1 - Assíncrono (ADR-004) com o notificacao-service DESLIGADO
+   12 x PUT /alunos/4/concluir-curso -> 12 de 12 com HTTP 200 | 12º curso (promoção) em 261 ms
+   aluno 4: cursosConcluidos=12 plano=PREMIUM voucher=True notificado=False
+   mensagens esperando na fila notificacao.aluno-promovido: 1
+   [OK]     as 12 conclusões responderam 200 com o consumidor fora
+   [OK]     promoção imediata: PREMIUM + voucher na própria resposta
+   [OK]     notificação ainda pendente (notificado=false)
+   [OK]     mensagem guardada na fila enquanto o consumidor está fora
+   > docker compose start notificacao-service
+   notificação entregue 1.1 s depois de religar o consumidor
+   [OK]     consumidor voltou e entregou a notificação (notificado=true)
+   [OK]     exatamente 1 notificação enviada para o aluno
+
+## Cenário 2 - Assíncrono com o RabbitMQ DESLIGADO
+   12 x PUT /alunos/5/concluir-curso -> 12 de 12 com HTTP 200 | 12º curso em 37 ms
+   eventos pendentes no outbox (tabela outbox_eventos): 1
+   [OK]     as 12 conclusões responderam 200 com o broker fora
+   [OK]     evento guardado no outbox enquanto o broker está fora
+   > docker compose start rabbitmq
+   notificação entregue 5.2 s depois de religar o broker
+   [OK]     broker voltou: o relay publicou e o consumidor entregou (notificado=true)
+   [OK]     outbox esvaziou depois da publicação
+
+## Cenário 3 - Alternativa A: síncrono (NOTIFICACAO_MODO=sincrono) com o notificacao-service DESLIGADO
+   12º PUT /alunos/6/concluir-curso -> HTTP 503 em 2610 ms | Serviço de notificação indisponível: a conclusão do curso não foi registrada.
+   aluno 6: cursosConcluidos=11 plano=BASICO voucher=False notificado=False
+   [OK]     12º curso falha com 503: a notificação virou dependência da conclusão
+   [OK]     conclusão desfeita: o aluno continua com 11 cursos e BASICO
+   > docker compose start notificacao-service
+   12º curso de novo -> HTTP 200 em 38 ms | notificado=True | 5 tentativa(s), 8,1 s depois de o serviço responder ao /health
+   [OK]     com o consumidor de volta, o 12º curso passa (12 cursos, sem contar as tentativas que falharam) e já sai notificado
+
+Latência do 12º curso (promoção): assíncrono 261 ms | síncrono com consumidor no ar 38 ms
+
+## Resultado: 13 de 13 verificações passaram
