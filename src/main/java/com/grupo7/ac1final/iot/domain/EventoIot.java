@@ -1,4 +1,4 @@
-package com.grupo7.ac1final.iot;
+package com.grupo7.ac1final.iot.domain;
 
 import java.time.Instant;
 
