@@ -112,6 +112,7 @@ deveLiberarTresCursosExtrasParaAlunoDoPlanoBasicoComMediaMaiorOuIgualA7()
 - **Spring Boot Actuator + Micrometer** (métricas, B1 / Desafio 6)
 - **Prometheus** e **Grafana** (observabilidade, B1 / Desafio 6)
 - **Jenkins** com Configuration as Code (esteira, B1 / Desafio 6)
+- **MQTT: Mosquitto + paho-mqtt** (eventos IoT dos laboratórios, B1 / Desafio 5)
 
 ---
 
@@ -133,15 +134,19 @@ ac1final/
 │   │   │       ├── mensageria/             ← OutboxRelay e topologia do RabbitMQ (ADR-004)
 │   │   │       └── http/                   ← alternativa síncrona, só para o mini-lab (ADR-004)
 │   │   ├── ranking/                        ← módulo ranking (GET /ranking)
-│   │   └── ia/                             ← módulo ia: portas + adapter HTTP para o ia-service (ADR-003)
+│   │   ├── ia/                             ← módulo ia: portas + adapter HTTP para o ia-service (ADR-003)
+│   │   └── iot/                            ← módulo iot: eventos dos laboratórios, deduplicados por eventoId (ADR-005)
 │   └── test/java/com/grupo7/ac1final/
 │       ├── aluno/                          ← domínio, casos de uso, contrato da porta, integração
 │       ├── ranking/
+│       ├── iot/                            ← deduplicação e integração dos eventos IoT (Desafio 5)
 │       ├── observabilidade/                ← métricas que comprovam os ADRs (Desafio 6)
-│       └── arquitetura/                    ← regras ArchUnit (ADR-001 a ADR-004)
+│       └── arquitetura/                    ← regras ArchUnit (ADR-001 a ADR-005)
 ├── docs/arquitetura/                       ← registro arquitetural do B1
 ├── ia-service/                             ← serviço Python/FastAPI de IA (ADR-003)
 ├── notificacao-service/                    ← consumidor RabbitMQ da promoção para PREMIUM (ADR-004)
+├── iot-gateway/                            ← MQTT dos laboratórios → Core, e o simulador de dispositivo (ADR-005)
+├── mosquitto/                              ← configuração do broker MQTT (ADR-005)
 ├── labs/                                   ← scripts dos mini-labs (geram as evidências)
 ├── observabilidade/                        ← prometheus.yml e dashboard do Grafana (ADR-006)
 ├── jenkins/                                ← imagem do Jenkins, plugins e casc.yaml (ADR-006)
@@ -284,6 +289,8 @@ http://localhost:8080/alunos
 | GET | `/ranking?limite=10` | Ranking por cursos concluídos (B1/ADR-001) |
 | GET | `/alunos/{id}/recomendacoes?limite=3` | Recomendação de cursos pela IA; se a IA cair, devolve a trilha padrão (`origem: PADRAO`) (B1/ADR-003) |
 | POST | `/alunos/{id}/assistente` | Assistente educacional, corpo `{"pergunta": "..."}`; 503 se a IA estiver fora (B1/ADR-003) |
+| POST | `/iot/eventos` | Evento de laboratório já traduzido pelo `iot-gateway`: 201 registrado, 200 duplicado (mesmo `eventoId`), 404 aluno inexistente, 400 inválido (B1/ADR-005) |
+| GET | `/iot/eventos?alunoId=7` | Eventos IoT (presença, início e conclusão) registrados para o aluno (B1/ADR-005) |
 
 Ao atingir **12 cursos concluídos**, o endpoint de conclusão de curso atualiza o plano para `PREMIUM` e registra o voucher. Desde o B1 (ADR-004), essa promoção também gera o evento `AlunoPromovidoPremium`, e a notificação chega de forma assíncrona.
 
@@ -416,7 +423,7 @@ O frontend é servido pelo Nginx quando executado com Docker.
 
 # Docker
 
-A aplicação foi preparada para execução utilizando **Docker Compose**. Na AC1 eram quatro serviços; o B1 acrescenta o `ia-service` (Desafio 3), o RabbitMQ e o `notificacao-service` (Desafio 4), e o Prometheus, o Grafana e o Jenkins (Desafio 6):
+A aplicação foi preparada para execução utilizando **Docker Compose**. Na AC1 eram quatro serviços; o B1 acrescenta o `ia-service` (Desafio 3), o RabbitMQ e o `notificacao-service` (Desafio 4), o Mosquitto e o `iot-gateway` (Desafio 5), e o Prometheus, o Grafana e o Jenkins (Desafio 6):
 
 ```text
 Frontend VueJS + Nginx  → localhost:5173
@@ -426,6 +433,8 @@ PGAdmin                 → localhost:5050
 ia-service (FastAPI)    → localhost:8000   (B1 / Desafio 3)
 RabbitMQ                → localhost:5672 (AMQP) e 15672 (painel)   (B1 / Desafio 4)
 notificacao-service     → localhost:8001   (B1 / Desafio 4)
+Mosquitto (MQTT)        → localhost:1883   (B1 / Desafio 5)
+iot-gateway             → sem porta: assina o MQTT e chama o Core   (B1 / Desafio 5)
 Prometheus              → localhost:9090   (B1 / Desafio 6)
 Grafana                 → localhost:3000   (B1 / Desafio 6)
 Jenkins                 → localhost:8081   (B1 / Desafio 6, perfil ci)
@@ -442,6 +451,8 @@ Jenkins                 → localhost:8081   (B1 / Desafio 6, perfil ci)
 | ia-service | `ac1-ia` | 8000 |
 | RabbitMQ | `ac1-rabbitmq` | 5672 / 15672 |
 | notificacao-service | `ac1-notificacao` | 8001 |
+| Mosquitto | `ac1-mosquitto` | 1883 |
+| iot-gateway | `ac1-iot-gateway` | — |
 | Prometheus | `ac1-prometheus` | 9090 |
 | Grafana | `ac1-grafana` | 3000 |
 | Jenkins (perfil `ci`) | `ac1-jenkins` | 8081 |
@@ -470,6 +481,18 @@ ac1-frontend   Up
 ac1-pgadmin    Up
 ac1-postgres   Up (healthy)
 ```
+
+## Simulador de dispositivo IoT
+
+O simulador faz o papel de um aparelho do laboratório e publica no Mosquitto (perfil `lab`):
+
+```powershell
+docker compose run --rm iot-simulador --aluno 1 --presenca --inicio --conclusoes 1
+docker compose run --rm iot-simulador --aluno 1 --conclusoes 1 --repetir 3   # retransmissão: conta 1 vez
+docker compose run --rm iot-simulador --aluno 1 --conclusoes 10 --offline    # guarda e envia ao reconectar
+```
+
+O resultado aparece em `GET /alunos/1` e em `GET /iot/eventos?alunoId=1`, e o `docker compose logs iot-gateway` mostra cada evento como `REGISTRADO` ou `DUPLICADO`.
 
 ## Esteira (Jenkins)
 

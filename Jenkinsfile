@@ -1,6 +1,6 @@
 // B1 / Desafio 6 (ADR-006) - esteira do monorepo, com um caminho independente por componente.
 //
-// Cada componente (Core Java, ia-service, notificacao-service) passa pelas mesmas barreiras:
+// Cada componente (Core Java, ia-service, notificacao-service, iot-gateway) passa pelas mesmas barreiras:
 //   testes (no Core, inclui as regras ArchUnit dos ADRs) -> imagem -> homologação + smoke test.
 // Um componente só roda quando o código DELE mudou desde o último build bem-sucedido,
 // e a falha de um não impede o deploy dos outros (failFast desligado).
@@ -46,8 +46,9 @@ pipeline {
                     env.MUDOU_CORE = (tudo || mudou(arquivos, ['src/', 'pom.xml', 'Dockerfile', '.mvn/', 'mvnw'])).toString()
                     env.MUDOU_IA = (tudo || mudou(arquivos, ['ia-service/'])).toString()
                     env.MUDOU_NOTIFICACAO = (tudo || mudou(arquivos, ['notificacao-service/'])).toString()
+                    env.MUDOU_IOT = (tudo || mudou(arquivos, ['iot-gateway/'])).toString()
                     echo "commit ${env.TAG} | último sucesso: ${anterior ?: 'nenhum'} | " +
-                         "core=${env.MUDOU_CORE} ia=${env.MUDOU_IA} notificacao=${env.MUDOU_NOTIFICACAO}"
+                         "core=${env.MUDOU_CORE} ia=${env.MUDOU_IA} notificacao=${env.MUDOU_NOTIFICACAO} iot=${env.MUDOU_IOT}"
                 }
             }
         }
@@ -137,6 +138,38 @@ pipeline {
                             steps {
                                 // sem RabbitMQ na homologação: sobe só a API, com o consumidor desligado
                                 sh "sh ci/deploy-homolog.sh ac1-notificacao-homolog ac1/notificacao-service:${env.TAG} 8001 /health -e CONSUMIDOR_HABILITADO=false"
+                            }
+                        }
+                    }
+                }
+
+                stage('iot-gateway (Python)') {
+                    when { environment name: 'MUDOU_IOT', value: 'true' }
+                    stages {
+                        stage('iot-gateway: testes') {
+                            steps {
+                                dir('iot-gateway') {
+                                    sh '''
+                                        python3 -m venv .venv
+                                        . .venv/bin/activate
+                                        pip install -q -r requirements-dev.txt
+                                        pytest -q --junitxml=relatorio-testes.xml
+                                    '''
+                                }
+                            }
+                            post {
+                                always { junit allowEmptyResults: true, testResults: 'iot-gateway/relatorio-testes.xml' }
+                            }
+                        }
+                        stage('iot-gateway: imagem') {
+                            steps {
+                                sh "docker build -t ac1/iot-gateway:${env.TAG} iot-gateway"
+                            }
+                        }
+                        stage('iot-gateway: smoke da imagem') {
+                            steps {
+                                // sem broker MQTT na homologação: confere que a imagem sobe com as dependências certas
+                                sh "docker run --rm ac1/iot-gateway:${env.TAG} python -c 'import app.main, app.simulador'"
                             }
                         }
                     }
