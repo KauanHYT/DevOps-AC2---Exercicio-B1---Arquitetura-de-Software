@@ -1,0 +1,1 @@
+"""Serviço de notificação da plataforma (B1 – Desafio 4)."""
