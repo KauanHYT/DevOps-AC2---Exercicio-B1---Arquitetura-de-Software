@@ -31,12 +31,16 @@ pipeline {
             steps {
                 script {
                     def scmVars = checkout scm
-                    env.TAG = scmVars.GIT_COMMIT.substring(0, 7)
-                    def anterior = scmVars.GIT_PREVIOUS_SUCCESSFUL_COMMIT
+                    env.COMMIT = scmVars.GIT_COMMIT
+                    env.TAG = env.COMMIT.substring(0, 7)
+                    // base da comparação: o commit do último build bem-sucedido DO JOB, em qualquer branch
+                    // (o GIT_PREVIOUS_SUCCESSFUL_COMMIT do Git é por branch e vem vazio em branch nova)
+                    def ultimoSucesso = currentBuild.previousSuccessfulBuild
+                    def anterior = ultimoSucesso ? ultimoSucesso.buildVariables.COMMIT : null
                     def tudo = !anterior || params.CONSTRUIR_TUDO
                     def arquivos = []
                     if (!tudo) {
-                        arquivos = sh(script: "git diff --name-only ${anterior} ${scmVars.GIT_COMMIT}",
+                        arquivos = sh(script: "git diff --name-only ${anterior} ${env.COMMIT}",
                                       returnStdout: true).trim().tokenize('\n')
                     }
                     env.MUDOU_CORE = (tudo || mudou(arquivos, ['src/', 'pom.xml', 'Dockerfile', '.mvn/', 'mvnw'])).toString()
