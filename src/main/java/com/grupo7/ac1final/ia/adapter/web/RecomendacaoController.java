@@ -2,6 +2,8 @@ package com.grupo7.ac1final.ia.adapter.web;
 
 import com.grupo7.ac1final.ia.application.RecomendacaoService;
 import com.grupo7.ac1final.ia.domain.Recomendacoes;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,17 +16,33 @@ import org.springframework.web.bind.annotation.RestController;
 @CrossOrigin(origins = "http://localhost:5173")
 public class RecomendacaoController {
 
-    private final RecomendacaoService recomendacaoService;
+    /** Desafio 6: quantas recomendações saíram da IA e quantas da trilha padrão (ASR-07). */
+    public static final String RECOMENDACOES = "gamificacao.recomendacoes";
 
-    public RecomendacaoController(RecomendacaoService recomendacaoService) {
+    private final RecomendacaoService recomendacaoService;
+    private final MeterRegistry metricas;
+
+    public RecomendacaoController(RecomendacaoService recomendacaoService, MeterRegistry metricas) {
         this.recomendacaoService = recomendacaoService;
+        this.metricas = metricas;
     }
 
     @GetMapping("/alunos/{id}/recomendacoes")
     public ResponseEntity<Recomendacoes> recomendar(@PathVariable("id") Long id,
                                                     @RequestParam(name = "limite", defaultValue = "3") int limite) {
         return recomendacaoService.recomendar(id, limite)
-                .map(ResponseEntity::ok)
+                .map(recomendacoes -> {
+                    contar(recomendacoes);
+                    return ResponseEntity.ok(recomendacoes);
+                })
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    private void contar(Recomendacoes recomendacoes) {
+        Counter.builder(RECOMENDACOES)
+                .description("Recomendações entregues, por origem: IA ou trilha PADRAO (ADR-003)")
+                .tag("origem", recomendacoes.origem().name())
+                .register(metricas)
+                .increment();
     }
 }

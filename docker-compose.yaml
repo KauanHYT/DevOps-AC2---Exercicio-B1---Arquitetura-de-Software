@@ -79,6 +79,53 @@ services:
       postgres:
         condition: service_healthy
 
+  # B1 / Desafio 6: observabilidade. O Prometheus coleta as métricas do Core e do RabbitMQ;
+  # o Grafana mostra o dashboard versionado em observabilidade/grafana. Versões fixas (RPC).
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: ac1-prometheus
+    volumes:
+      - ./observabilidade/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: ac1-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      # só para o laboratório: qualquer um vê os dashboards sem login (não edita)
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/b1-arquitetura.json
+    volumes:
+      - ./observabilidade/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observabilidade/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  # B1 / Desafio 6 (ADR-006): a esteira. Perfil "ci": só sobe quando pedida pelo nome.
+  # Usa o Docker da própria máquina (docker.sock) para construir e implantar as imagens
+  # e lê o repositório local montado em /repo (só o que já foi commitado).
+  jenkins:
+    build:
+      context: ./jenkins
+    container_name: ac1-jenkins
+    profiles: ["ci"]
+    user: root
+    ports:
+      - "8081:8080"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - maven_cache:/root/.m2
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/repo:ro
+    networks:
+      - ci
+
   frontend:
     build:
       context: ./frontend
@@ -91,3 +138,10 @@ services:
 
 volumes:
   postgres_data:
+  jenkins_home:
+  maven_cache:
+
+# rede da homologação: o Jenkins e os containers que ele implanta (ac1-*-homolog)
+networks:
+  ci:
+    name: b1-ci

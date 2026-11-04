@@ -1,0 +1,11 @@
+# B1 / Desafio 6 - os dashboards vêm de arquivos versionados no Git.
+apiVersion: 1
+
+providers:
+  - name: b1-architecture-lab
+    folder: B1 - Architecture Lab
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

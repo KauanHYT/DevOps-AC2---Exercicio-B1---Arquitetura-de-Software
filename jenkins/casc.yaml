@@ -1,0 +1,40 @@
+# B1 / Desafio 6 (ADR-006): toda a configuração do Jenkins está aqui (Configuration as Code).
+# Apagou o container? Ele volta igual, com o mesmo usuário e o mesmo job.
+jenkins:
+  systemMessage: "B1 / Desafio 6 - esteira do Grupo 7. Configuração em jenkins/casc.yaml (ADR-006)."
+  numExecutors: 2
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "admin"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: true
+
+unclassified:
+  location:
+    url: "http://localhost:8081/"
+
+jobs:
+  - script: |
+      pipelineJob('b1-esteira') {
+        description('Esteira do monorepo: um caminho por componente (Core, ia-service, notificacao-service). ADR-006.')
+        parameters {
+          stringParam('BRANCH', 'feature/desafio-6', 'Branch do repositório local (montado em /repo) a construir')
+          booleanParam('CONSTRUIR_TUDO', false, 'Ignora a detecção de mudanças e roda todos os componentes')
+        }
+        definition {
+          cpsScm {
+            lightweight(false)
+            scm {
+              git {
+                remote { url('file:///repo') }
+                branch('^${BRANCH}')
+              }
+            }
+            scriptPath('Jenkinsfile')
+          }
+        }
+      }

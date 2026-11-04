@@ -107,6 +107,11 @@ deveLiberarTresCursosExtrasParaAlunoDoPlanoBasicoComMediaMaiorOuIgualA7()
 - **Docker**
 - **Docker Compose**
 - **Nginx**
+- **Python 3.12 / FastAPI** (serviços `ia-service` e `notificacao-service`, B1)
+- **RabbitMQ** (eventos, B1 / Desafio 4)
+- **Spring Boot Actuator + Micrometer** (métricas, B1 / Desafio 6)
+- **Prometheus** e **Grafana** (observabilidade, B1 / Desafio 6)
+- **Jenkins** com Configuration as Code (esteira, B1 / Desafio 6)
 
 ---
 
@@ -132,11 +137,16 @@ ac1final/
 │   └── test/java/com/grupo7/ac1final/
 │       ├── aluno/                          ← domínio, casos de uso, contrato da porta, integração
 │       ├── ranking/
+│       ├── observabilidade/                ← métricas que comprovam os ADRs (Desafio 6)
 │       └── arquitetura/                    ← regras ArchUnit (ADR-001 a ADR-004)
 ├── docs/arquitetura/                       ← registro arquitetural do B1
 ├── ia-service/                             ← serviço Python/FastAPI de IA (ADR-003)
 ├── notificacao-service/                    ← consumidor RabbitMQ da promoção para PREMIUM (ADR-004)
 ├── labs/                                   ← scripts dos mini-labs (geram as evidências)
+├── observabilidade/                        ← prometheus.yml e dashboard do Grafana (ADR-006)
+├── jenkins/                                ← imagem do Jenkins, plugins e casc.yaml (ADR-006)
+├── ci/                                     ← deploy na homologação + smoke test (ADR-006)
+├── Jenkinsfile                             ← esteira com um caminho por componente (ADR-006)
 ├── frontend/
 ├── Dockerfile
 ├── docker-compose.yaml
@@ -406,7 +416,7 @@ O frontend é servido pelo Nginx quando executado com Docker.
 
 # Docker
 
-A aplicação foi preparada para execução utilizando **Docker Compose**. Na AC1 eram quatro serviços; o B1 acrescenta o `ia-service` (Desafio 3), o RabbitMQ e o `notificacao-service` (Desafio 4):
+A aplicação foi preparada para execução utilizando **Docker Compose**. Na AC1 eram quatro serviços; o B1 acrescenta o `ia-service` (Desafio 3), o RabbitMQ e o `notificacao-service` (Desafio 4), e o Prometheus, o Grafana e o Jenkins (Desafio 6):
 
 ```text
 Frontend VueJS + Nginx  → localhost:5173
@@ -416,6 +426,9 @@ PGAdmin                 → localhost:5050
 ia-service (FastAPI)    → localhost:8000   (B1 / Desafio 3)
 RabbitMQ                → localhost:5672 (AMQP) e 15672 (painel)   (B1 / Desafio 4)
 notificacao-service     → localhost:8001   (B1 / Desafio 4)
+Prometheus              → localhost:9090   (B1 / Desafio 6)
+Grafana                 → localhost:3000   (B1 / Desafio 6)
+Jenkins                 → localhost:8081   (B1 / Desafio 6, perfil ci)
 ```
 
 ## Serviços
@@ -429,6 +442,9 @@ notificacao-service     → localhost:8001   (B1 / Desafio 4)
 | ia-service | `ac1-ia` | 8000 |
 | RabbitMQ | `ac1-rabbitmq` | 5672 / 15672 |
 | notificacao-service | `ac1-notificacao` | 8001 |
+| Prometheus | `ac1-prometheus` | 9090 |
+| Grafana | `ac1-grafana` | 3000 |
+| Jenkins (perfil `ci`) | `ac1-jenkins` | 8081 |
 
 ## Executando com Docker
 
@@ -454,6 +470,16 @@ ac1-frontend   Up
 ac1-pgadmin    Up
 ac1-postgres   Up (healthy)
 ```
+
+## Esteira (Jenkins)
+
+O Jenkins só sobe quando é pedido pelo nome (perfil `ci`). Ele já vem configurado pelo arquivo `jenkins/casc.yaml`, com o usuário `admin` e o job `b1-esteira`:
+
+```powershell
+docker compose up -d --build jenkins
+```
+
+Em http://localhost:8081, entre com `admin` / `admin`, abra **b1-esteira** e use **Construir com parâmetros**. O Jenkins lê o repositório local, então só enxerga o que já foi commitado. Os componentes aprovados sobem na homologação como `ac1-core-homolog`, `ac1-ia-homolog` e `ac1-notificacao-homolog`.
 
 ## Parar os containers
 
@@ -482,6 +508,11 @@ docker compose down -v
 | ia-service (Swagger do FastAPI) | http://localhost:8000/docs |
 | RabbitMQ (painel, usuário/senha `guest`) | http://localhost:15672 |
 | notificacao-service (notificações enviadas) | http://localhost:8001/notificacoes |
+| Métricas do Core (formato Prometheus) | http://localhost:8080/actuator/prometheus |
+| Saúde do Core | http://localhost:8080/actuator/health |
+| Prometheus | http://localhost:9090 |
+| Grafana (dashboard "B1 - Evidências arquiteturais"; editar: `admin`/`admin`) | http://localhost:3000 |
+| Jenkins (`admin`/`admin`) | http://localhost:8081 |
 
 ---
 
