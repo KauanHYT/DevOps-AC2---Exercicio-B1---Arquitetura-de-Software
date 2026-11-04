@@ -4,6 +4,7 @@ import com.grupo7.ac1final.aluno.adapter.memoria.AlunoRepositoryEmMemoria;
 import com.grupo7.ac1final.aluno.api.ProgressoAluno;
 import com.grupo7.ac1final.aluno.domain.Aluno;
 import org.junit.jupiter.api.Test;
+import com.grupo7.ac1final.aluno.application.port.NotificadorPromocao;
 
 import java.util.List;
 
@@ -11,14 +12,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Casos de uso testados com o adapter em memória: sem Spring, sem banco,
- * executam em milissegundos (evidência do Desafio 2).
- */
 class AlunoServiceTest {
 
     private final AlunoRepositoryEmMemoria repositorio = new AlunoRepositoryEmMemoria();
-    private final AlunoService service = new AlunoService(repositorio);
+    private final AlunoService service = new AlunoService(repositorio, evento -> NotificadorPromocao.Resultado.AGENDADA);
 
     private Long novoAluno() {
         return service.cadastrar(new DadosCadastroAluno("BASICO", 0, 0, false, false)).getId();
@@ -46,7 +43,6 @@ class AlunoServiceTest {
         assertEquals(3, aluno.getCursosAdicionaisPermitidos());
     }
 
-    /** Regressão: na AC1 o endpoint liberava 3 cursos sem olhar a média. */
     @Test
     void liberarCursosComMediaAbaixoDeSeteNaoLiberaCursos() {
         Long id = novoAluno();

@@ -2,26 +2,28 @@ package com.grupo7.ac1final.aluno.application;
 
 import com.grupo7.ac1final.aluno.api.ProgressoAluno;
 import com.grupo7.ac1final.aluno.api.ProgressoAlunoConsulta;
+import com.grupo7.ac1final.aluno.api.ProgressoIndividualConsulta;
 import com.grupo7.ac1final.aluno.application.port.AlunoRepositoryPort;
+import com.grupo7.ac1final.aluno.application.port.NotificadorPromocao;
 import com.grupo7.ac1final.aluno.domain.Aluno;
+import com.grupo7.ac1final.aluno.domain.AlunoPromovidoPremium;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.grupo7.ac1final.aluno.api.ProgressoIndividualConsulta;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Casos de uso do módulo aluno. Orquestra: busca pela porta, delega a regra ao
- * domínio e salva pela porta. Não conhece JPA, entidades nem HTTP (ADR-002).
- */
+
 @Service
 public class AlunoService implements ProgressoAlunoConsulta, ProgressoIndividualConsulta {
 
     private final AlunoRepositoryPort repositorio;
+    private final NotificadorPromocao notificador;
 
-    public AlunoService(AlunoRepositoryPort repositorio) {
+    public AlunoService(AlunoRepositoryPort repositorio, NotificadorPromocao notificador) {
         this.repositorio = repositorio;
+        this.notificador = notificador;
     }
 
     @Transactional
@@ -40,7 +42,6 @@ public class AlunoService implements ProgressoAlunoConsulta, ProgressoIndividual
         return repositorio.buscarPorId(id);
     }
 
-    /** @return false se o aluno não existir */
     @Transactional
     public boolean remover(Long id) {
         if (!repositorio.existe(id)) {
@@ -50,16 +51,27 @@ public class AlunoService implements ProgressoAlunoConsulta, ProgressoIndividual
         return true;
     }
 
-    /** US 2: ao concluir 12 cursos o aluno vira PREMIUM e ganha voucher (regra no domínio). */
     @Transactional
     public Optional<Aluno> concluirCurso(Long id) {
-        return repositorio.buscarPorId(id).map(aluno -> {
-            aluno.concluirCurso();
-            return repositorio.salvar(aluno);
-        });
+        return repositorio.buscarPorId(id).map(this::concluirCursoDe);
     }
 
-    /** US 1 e 4: 3 cursos extras somente com média maior ou igual a 7,0 (regra no domínio). */
+    private Aluno concluirCursoDe(Aluno aluno) {
+        boolean eraPremium = aluno.isPremium();
+        aluno.concluirCurso();
+        Aluno salvo = repositorio.salvar(aluno);
+
+        if (eraPremium || !salvo.isPremium()) {
+            return salvo;
+        }
+        AlunoPromovidoPremium evento = AlunoPromovidoPremium.de(salvo, Instant.now());
+        if (notificador.notificar(evento) == NotificadorPromocao.Resultado.ENTREGUE) {
+            salvo.identificarMudancaDePlano();
+            salvo = repositorio.salvar(salvo);
+        }
+        return salvo;
+    }
+
     @Transactional
     public Optional<Aluno> liberarCursosExtras(Long id, double media) {
         return repositorio.buscarPorId(id).map(aluno -> {
@@ -68,7 +80,6 @@ public class AlunoService implements ProgressoAlunoConsulta, ProgressoIndividual
         });
     }
 
-    /** US 3: registra a notificação somente se o aluno já for PREMIUM (regra no domínio). */
     @Transactional
     public Optional<Aluno> registrarNotificacaoMudancaPlano(Long id) {
         return repositorio.buscarPorId(id).map(aluno -> {
