@@ -107,6 +107,25 @@ services:
     depends_on:
       - prometheus
 
+  # B1 / Desafio 6 (ADR-006): a esteira. Perfil "ci": só sobe quando pedida pelo nome.
+  # Usa o Docker da própria máquina (docker.sock) para construir e implantar as imagens
+  # e lê o repositório local montado em /repo (só o que já foi commitado).
+  jenkins:
+    build:
+      context: ./jenkins
+    container_name: ac1-jenkins
+    profiles: ["ci"]
+    user: root
+    ports:
+      - "8081:8080"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - maven_cache:/root/.m2
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/repo:ro
+    networks:
+      - ci
+
   frontend:
     build:
       context: ./frontend
@@ -119,3 +138,10 @@ services:
 
 volumes:
   postgres_data:
+  jenkins_home:
+  maven_cache:
+
+# rede da homologação: o Jenkins e os containers que ele implanta (ac1-*-homolog)
+networks:
+  ci:
+    name: b1-ci
