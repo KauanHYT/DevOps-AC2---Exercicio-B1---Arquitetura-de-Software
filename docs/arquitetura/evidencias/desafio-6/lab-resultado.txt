@@ -1,0 +1,41 @@
+# Mini-lab Desafio 6 - métricas que comprovam as decisões arquiteturais
+# Executado em 2026-11-04 01:44:52
+
+## Cenário 0 - Ambiente observado
+   [OK]     Prometheus lê o Core (up{job="core"} = 1)
+   [OK]     Prometheus lê o RabbitMQ (up{job="rabbitmq"} = 1)
+
+## Cenário 1 - IA fora do ar (ADR-003 / ASR-07)
+   > docker compose stop ia-service
+   10 recomendações com a IA fora -> 10 com HTTP 200 e origem=PADRAO | concluir-curso -> HTTP 200
+   Prometheus: gamificacao_recomendacoes_total{origem=PADRAO} 10 -> 20
+   [OK]     as 10 recomendações responderam 200 com a trilha PADRAO
+   [OK]     a queda da IA aparece no Prometheus (+10 em origem=PADRAO)
+   [OK]     concluir-curso continua com 200 com a IA fora
+   > docker compose start ia-service
+
+## Cenário 2 - RabbitMQ fora do ar (ADR-004 / ASR-09 e ASR-10)
+   > docker compose stop rabbitmq
+   12 conclusões com o broker fora -> 12 com HTTP 200
+   Prometheus: up{job=rabbitmq} = 0 em 6 s | gamificacao_outbox_pendentes = 1
+   [OK]     a queda do broker aparece no Prometheus (up{job="rabbitmq"} = 0)
+   [OK]     as 12 conclusões responderam 200 com o broker fora
+   [OK]     o evento parado aparece no Prometheus (outbox pendente >= 1)
+   > docker compose start rabbitmq
+   Prometheus: outbox voltou a 0 em 16.1 s depois de religar o broker
+   [OK]     o outbox esvazia sozinho quando o broker volta (nada se perdeu)
+
+## Cenário 3 - Consumidor fora do ar (ADR-004 / ASR-10)
+   > docker compose stop notificacao-service
+   12 conclusões com o consumidor fora -> 12 com HTTP 200 | Prometheus: mensagens na fila = 1
+   [OK]     a mensagem esperando aparece no Prometheus (fila >= 1)
+   > docker compose start notificacao-service
+   Prometheus: fila voltou a 0 em 8.1 s depois de religar o consumidor
+   [OK]     a fila esvazia quando o consumidor volta
+
+## Cenário 4 - O fluxo essencial durante todas as falhas (ASR-09)
+   Prometheus (últimos 15 min): ~50 conclusões de curso, ~0 com status diferente de 200, p95 = 10 ms
+   [OK]     nenhuma conclusão de curso falhou enquanto IA, broker e consumidor caíam
+   [OK]     latência p95 da conclusão de curso abaixo de 1 s
+
+## Resultado: 13 de 13 verificações passaram
